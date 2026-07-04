@@ -821,7 +821,8 @@ const ICON = {
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
   crate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 7 12 3 4 7l8 4 8-4Z"/><path d="M4 7v10l8 4"/><path d="M20 7v10l-8 4"/><path d="M12 11v10"/></svg>',
   phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.34 1.79.65 2.65a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.43-1.43a2 2 0 0 1 2.11-.45c.86.31 1.75.53 2.65.65A2 2 0 0 1 22 16.92Z"/></svg>',
-  print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>'
+  print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'
 };
 
 // ---------- RENDER ROOT ----------
@@ -1169,6 +1170,7 @@ function compraCardHTML(c){
         </div>
         <div class="actions-row">
           <button class="icon-btn" data-print-compra="${c.id}">${ICON.print}</button>
+          <button class="icon-btn" data-copy-compra="${c.id}">${ICON.copy}</button>
           <button class="icon-btn" data-edit-compra="${c.id}">${ICON.edit}</button>
           <button class="icon-btn danger" data-del-compra="${c.id}">${ICON.trash}</button>
         </div>
@@ -1534,6 +1536,23 @@ async function printOrderList(){
     console.error(e);
     showToast('Falha ao imprimir via Bluetooth. Verifique a impressora.');
   }
+}
+function compraTextoWhatsapp(c){
+  const fornecedor = fornecedores.find(f=>f.id===c.fornecedorId);
+  const linhas = c.itens.map(i=>{
+    if(compraItemPrecoPendente(i)){
+      return `- ${i.qtd}${abbrevUnidade(i.unidade)} ${i.produtoNome} — _preço pendente_`;
+    }
+    return `- ${i.qtd}${abbrevUnidade(i.unidade)} ${i.produtoNome} (${fmtMoney(i.custoUnit)}) = ${fmtMoney(i.qtd*i.custoUnit)}`;
+  }).join('\n');
+  const fp = formaPagamentoInfo(c.formaPagamento);
+  let txt = `*Tnk - P. 268*\n`;
+  txt += `Compra - ${fmtDate(c.data)}\n`;
+  txt += `Fornecedor: ${fornecedor ? fornecedor.nome : '(removido)'}\n\n`;
+  txt += `${linhas}\n\n`;
+  txt += `*Total: ${fmtMoney(compraTotal(c))}*\n`;
+  txt += `Pagamento: ${c.statusPagamento==='pago' ? 'Pago' : 'Pendente'}${fp ? ' ('+fp.label+')' : ''}`;
+  return txt;
 }
 function buildCompraReceiptBytes(c){
   const fornecedor = fornecedores.find(f=>f.id===c.fornecedorId);
@@ -2043,6 +2062,29 @@ function attachContentEvents(){
   document.querySelectorAll('[data-print-compra]').forEach(b=>b.addEventListener('click', ()=>{
     printCompra(b.dataset.printCompra);
   }));
+  document.querySelectorAll('[data-copy-compra]').forEach(b=>b.addEventListener('click', async ()=>{
+    const c = compras.find(x=>x.id===b.dataset.copyCompra);
+    if(!c) return;
+    const texto = compraTextoWhatsapp(c);
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        await navigator.clipboard.writeText(texto);
+      }else{
+        const ta = document.createElement('textarea');
+        ta.value = texto;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      showToast('Copiado! Agora é só colar no WhatsApp.');
+    }catch(e){
+      console.error(e);
+      showToast('Não consegui copiar automaticamente. Tente novamente.');
+    }
+  }));
   const printCompraListBtn = document.getElementById('print-compra-list-btn');
   if(printCompraListBtn) printCompraListBtn.addEventListener('click', printCompraList);
   document.querySelectorAll('[data-status-pagamento-compra]').forEach(sel=>sel.addEventListener('change', ()=>{
@@ -2539,4 +2581,3 @@ function setStorageModeNote(){
 </script>
 </body>
 </html>
-
