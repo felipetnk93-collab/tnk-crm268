@@ -315,6 +315,27 @@
   .oi-field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:0.3px;color:var(--wood-light);font-weight:600;margin-bottom:3px;}
   .oi-field input{width:100%;}
   .oi-field input.needs-review{border-color:var(--corn);background:#FDF6E3;}
+  .product-select-btn{
+    flex:1;min-width:0;text-align:left;font-family:'Inter';font-size:13px;color:var(--wood);
+    background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 9px;cursor:pointer;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .product-select-btn.placeholder{color:var(--wood-light);}
+  .product-dropdown-panel{
+    position:fixed;z-index:500;background:#fff;border:1px solid var(--line);border-radius:10px;
+    box-shadow:0 8px 24px rgba(0,0,0,0.18);overflow:hidden;display:flex;flex-direction:column;
+  }
+  .product-dropdown-search{
+    border:none;border-bottom:1px solid var(--line);padding:10px 12px;font-family:'Inter';font-size:13.5px;
+    outline:none;color:var(--wood);
+  }
+  .product-dropdown-list{max-height:220px;overflow-y:auto;}
+  .product-dropdown-item{
+    padding:9px 12px;font-size:13px;color:var(--wood);cursor:pointer;
+  }
+  .product-dropdown-item:hover{background:var(--paper-2);}
+  .product-dropdown-item.selected{background:#DCE8D3;color:var(--sage);font-weight:600;}
+  .product-dropdown-empty{padding:12px;font-size:12.5px;color:var(--wood-light);text-align:center;}
   .remove-item{background:none;border:none;color:var(--tomato);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
   .remove-item svg{width:16px;height:16px;}
   .order-total{
@@ -449,6 +470,97 @@ const FORMAS_PAGAMENTO = [
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function sortByName(arr){
   return [...arr].sort((a,b)=>a.nome.localeCompare(b.nome, 'pt-BR', {sensitivity:'base'}));
+}
+
+// ---------- DROPDOWN CUSTOMIZADO DE PRODUTO (busca + auto-scroll ao passar o mouse) ----------
+let dropdownScrollSpeed = 0;
+let dropdownScrollRAF = null;
+let dropdownOutsideHandler = null;
+function stopDropdownAutoScroll(){
+  if(dropdownScrollRAF){ cancelAnimationFrame(dropdownScrollRAF); dropdownScrollRAF = null; }
+  dropdownScrollSpeed = 0;
+}
+function startDropdownAutoScroll(listEl){
+  function step(){
+    if(dropdownScrollSpeed !== 0){
+      listEl.scrollTop += dropdownScrollSpeed;
+    }
+    dropdownScrollRAF = requestAnimationFrame(step);
+  }
+  dropdownScrollRAF = requestAnimationFrame(step);
+}
+function closeProductDropdown(){
+  const existing = document.getElementById('product-dropdown-panel');
+  if(existing) existing.remove();
+  stopDropdownAutoScroll();
+  if(dropdownOutsideHandler){
+    document.removeEventListener('mousedown', dropdownOutsideHandler);
+    dropdownOutsideHandler = null;
+  }
+}
+function normalizeSearch(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+function openProductDropdown(anchorEl, currentProdutoId, labelFn, onSelect){
+  closeProductDropdown();
+  const rect = anchorEl.getBoundingClientRect();
+  const panel = document.createElement('div');
+  panel.id = 'product-dropdown-panel';
+  panel.className = 'product-dropdown-panel';
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const openUp = spaceBelow < 260;
+  panel.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)) + 'px';
+  panel.style.width = rect.width + 'px';
+  if(openUp){
+    panel.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+  }else{
+    panel.style.top = (rect.bottom + 4) + 'px';
+  }
+  panel.innerHTML = `
+    <input type="text" class="product-dropdown-search" placeholder="Buscar produto...">
+    <div class="product-dropdown-list"></div>
+  `;
+  document.body.appendChild(panel);
+
+  const searchInput = panel.querySelector('.product-dropdown-search');
+  const listEl = panel.querySelector('.product-dropdown-list');
+
+  function renderList(filterText){
+    const norm = normalizeSearch(filterText);
+    const filtered = sortByName(products).filter(p=>normalizeSearch(p.nome).includes(norm));
+    listEl.innerHTML = filtered.length ? filtered.map(p=>`
+      <div class="product-dropdown-item ${p.id===currentProdutoId?'selected':''}" data-pid="${p.id}">${escapeHtml(labelFn(p))}</div>
+    `).join('') : `<div class="product-dropdown-empty">Nenhum produto encontrado</div>`;
+  }
+  renderList('');
+
+  searchInput.addEventListener('input', ()=> renderList(searchInput.value));
+  listEl.addEventListener('mousedown', (e)=>{
+    const item = e.target.closest('.product-dropdown-item');
+    if(!item) return;
+    e.preventDefault();
+    onSelect(item.dataset.pid);
+    closeProductDropdown();
+  });
+  listEl.addEventListener('mousemove', (e)=>{
+    const bounds = listEl.getBoundingClientRect();
+    const y = e.clientY - bounds.top;
+    const edge = 34;
+    if(y < edge) dropdownScrollSpeed = -((edge - y) / 4 + 1);
+    else if(y > bounds.height - edge) dropdownScrollSpeed = (y - (bounds.height - edge)) / 4 + 1;
+    else dropdownScrollSpeed = 0;
+  });
+  listEl.addEventListener('mouseleave', ()=>{ dropdownScrollSpeed = 0; });
+  startDropdownAutoScroll(listEl);
+
+  searchInput.focus();
+
+  dropdownOutsideHandler = (e)=>{
+    if(!panel.contains(e.target) && e.target !== anchorEl){
+      closeProductDropdown();
+    }
+  };
+  setTimeout(()=>{ document.addEventListener('mousedown', dropdownOutsideHandler); }, 0);
 }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function localDateISO(offsetDays=0){
@@ -1666,6 +1778,7 @@ function openModal(html){
 function closeModal(){
   document.getElementById('overlay').classList.remove('open');
   document.getElementById('modal-body').innerHTML = '';
+  closeProductDropdown();
 }
 document.getElementById('overlay').addEventListener('click', (e)=>{
   if(e.target.id==='overlay') closeModal();
@@ -1793,20 +1906,19 @@ function orderItemRowHTML(it, idx){
     <div class="order-item-row" data-row="${idx}">
       <div class="oi-top">
         <label class="item-separado-check"><input type="checkbox" data-item-separado="${idx}" ${it.separado?'checked':''}></label>
-        <select data-item-produto="${idx}">
-          <option value="">Produto...</option>
-          ${sortByName(products).map(p=>`<option value="${p.id}" ${it.produtoId===p.id?'selected':''}>${escapeHtml(p.nome)} (${fmtMoney(p.preco)}/${p.unidade})</option>`).join('')}
-        </select>
+        <button type="button" class="product-select-btn ${!p?'placeholder':''}" data-item-produto-btn="${idx}">
+          ${p ? escapeHtml(p.nome) + ' (' + fmtMoney(p.preco) + '/' + p.unidade + ')' : 'Produto...'}
+        </button>
         <button type="button" class="remove-item" data-remove-item="${idx}">${ICON.trash}</button>
       </div>
       <div class="oi-bottom">
         <div class="oi-field">
           <label>Qtd</label>
-          <input type="number" min="0.01" step="0.01" data-item-qtd="${idx}" value="${it.qtd}" placeholder="Qtd">
+          <input type="number" min="0.01" step="0.01" data-item-qtd="${idx}" value="${it.qtd}" placeholder="Qtd" onfocus="this.select()">
         </div>
         <div class="oi-field">
           <label>Preço unit. (R$)</label>
-          <input type="number" min="0" step="0.01" data-item-preco="${idx}" value="${precoAtual}" placeholder="0,00">
+          <input type="number" min="0" step="0.01" data-item-preco="${idx}" value="${precoAtual}" placeholder="0,00" onfocus="this.select()">
         </div>
       </div>
     </div>
@@ -1885,20 +1997,19 @@ function compraItemRowHTML(it, idx){
   return `
     <div class="order-item-row" data-row="${idx}">
       <div class="oi-top">
-        <select data-compra-item-produto="${idx}">
-          <option value="">Produto...</option>
-          ${sortByName(products).map(p=>`<option value="${p.id}" ${it.produtoId===p.id?'selected':''}>${escapeHtml(p.nome)}${p.custo?` (custo ${fmtMoney(p.custo)}/${p.unidade})`:''}</option>`).join('')}
-        </select>
+        <button type="button" class="product-select-btn ${!p?'placeholder':''}" data-compra-item-produto-btn="${idx}">
+          ${p ? escapeHtml(p.nome) + (p.custo ? ' (custo '+fmtMoney(p.custo)+'/'+p.unidade+')' : '') : 'Produto...'}
+        </button>
         <button type="button" class="remove-item" data-remove-compra-item="${idx}">${ICON.trash}</button>
       </div>
       <div class="oi-bottom">
         <div class="oi-field">
           <label>Qtd</label>
-          <input type="number" min="0.01" step="0.01" data-compra-item-qtd="${idx}" value="${it.qtd}" placeholder="Qtd">
+          <input type="number" min="0.01" step="0.01" data-compra-item-qtd="${idx}" value="${it.qtd}" placeholder="Qtd" onfocus="this.select()">
         </div>
         <div class="oi-field">
           <label>Custo unit. (R$)</label>
-          <input type="number" min="0" step="0.01" data-compra-item-custo="${idx}" value="${custoAtual}" placeholder="0,00 (deixe em branco p/ marcar depois)" class="${compraItemPrecoPendente({custoUnit:custoAtual})?'needs-review':''}">
+          <input type="number" min="0" step="0.01" data-compra-item-custo="${idx}" value="${custoAtual}" placeholder="0,00 (deixe em branco p/ marcar depois)" class="${compraItemPrecoPendente({custoUnit:custoAtual})?'needs-review':''}" onfocus="this.select()">
         </div>
       </div>
     </div>
@@ -2191,15 +2302,19 @@ function bindPedidoForm(existing){
   });
 
   function rebindItemRows(){
-    document.querySelectorAll('[data-item-produto]').forEach(sel=>{
-      sel.addEventListener('change', ()=>{
-        const idx = sel.dataset.itemProduto;
-        orderDraftItems[idx].produtoId = sel.value;
-        const p = products.find(pp=>pp.id===sel.value);
-        orderDraftItems[idx].precoUnit = p ? p.preco : '';
-        const precoInput = document.querySelector(`[data-item-preco="${idx}"]`);
-        if(precoInput) precoInput.value = p ? p.preco : '';
-        recalcOrderTotal();
+    document.querySelectorAll('[data-item-produto-btn]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const idx = btn.dataset.itemProdutoBtn;
+        openProductDropdown(btn, orderDraftItems[idx].produtoId, (p)=>`${p.nome} (${fmtMoney(p.preco)}/${p.unidade})`, (selectedId)=>{
+          orderDraftItems[idx].produtoId = selectedId;
+          const p = products.find(pp=>pp.id===selectedId);
+          orderDraftItems[idx].precoUnit = p ? p.preco : '';
+          btn.textContent = p ? `${p.nome} (${fmtMoney(p.preco)}/${p.unidade})` : 'Produto...';
+          btn.classList.toggle('placeholder', !p);
+          const precoInput = document.querySelector(`[data-item-preco="${idx}"]`);
+          if(precoInput) precoInput.value = p ? p.preco : '';
+          recalcOrderTotal();
+        });
       });
     });
     document.querySelectorAll('[data-item-qtd]').forEach(inp=>{
@@ -2221,6 +2336,7 @@ function bindPedidoForm(existing){
     });
     document.querySelectorAll('[data-remove-item]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        closeProductDropdown();
         const idx = Number(btn.dataset.removeItem);
         if(orderDraftItems.length<=1) return;
         orderDraftItems.splice(idx,1);
@@ -2234,6 +2350,7 @@ function bindPedidoForm(existing){
   recalcOrderTotal();
 
   document.getElementById('add-item-row').addEventListener('click', ()=>{
+    closeProductDropdown();
     orderDraftItems.push({produtoId:'', qtd:1, separado:false, precoUnit:''});
     document.getElementById('order-items-wrap').innerHTML = orderDraftItems.map((it,i)=>orderItemRowHTML(it,i)).join('');
     rebindItemRows();
@@ -2280,18 +2397,22 @@ function bindCompraForm(existing){
   });
 
   function rebindCompraItemRows(){
-    document.querySelectorAll('[data-compra-item-produto]').forEach(sel=>{
-      sel.addEventListener('change', ()=>{
-        const idx = sel.dataset.compraItemProduto;
-        compraDraftItems[idx].produtoId = sel.value;
-        const p = products.find(pp=>pp.id===sel.value);
-        compraDraftItems[idx].custoUnit = p ? (p.custo||0) : '';
-        const custoInput = document.querySelector(`[data-compra-item-custo="${idx}"]`);
-        if(custoInput){
-          custoInput.value = p ? (p.custo||0) : '';
-          custoInput.classList.toggle('needs-review', compraItemPrecoPendente({custoUnit: custoInput.value}));
-        }
-        recalcCompraTotal();
+    document.querySelectorAll('[data-compra-item-produto-btn]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const idx = btn.dataset.compraItemProdutoBtn;
+        openProductDropdown(btn, compraDraftItems[idx].produtoId, (p)=>`${p.nome}${p.custo?' (custo '+fmtMoney(p.custo)+'/'+p.unidade+')':''}`, (selectedId)=>{
+          compraDraftItems[idx].produtoId = selectedId;
+          const p = products.find(pp=>pp.id===selectedId);
+          compraDraftItems[idx].custoUnit = p ? (p.custo||0) : '';
+          btn.textContent = p ? `${p.nome}${p.custo?' (custo '+fmtMoney(p.custo)+'/'+p.unidade+')':''}` : 'Produto...';
+          btn.classList.toggle('placeholder', !p);
+          const custoInput = document.querySelector(`[data-compra-item-custo="${idx}"]`);
+          if(custoInput){
+            custoInput.value = p ? (p.custo||0) : '';
+            custoInput.classList.toggle('needs-review', compraItemPrecoPendente({custoUnit: custoInput.value}));
+          }
+          recalcCompraTotal();
+        });
       });
     });
     document.querySelectorAll('[data-compra-item-qtd]').forEach(inp=>{
@@ -2309,6 +2430,7 @@ function bindCompraForm(existing){
     });
     document.querySelectorAll('[data-remove-compra-item]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        closeProductDropdown();
         const idx = Number(btn.dataset.removeCompraItem);
         if(compraDraftItems.length<=1) return;
         compraDraftItems.splice(idx,1);
@@ -2322,6 +2444,7 @@ function bindCompraForm(existing){
   recalcCompraTotal();
 
   document.getElementById('add-compra-item-row').addEventListener('click', ()=>{
+    closeProductDropdown();
     compraDraftItems.push({produtoId:'', qtd:1, custoUnit:''});
     document.getElementById('compra-items-wrap').innerHTML = compraDraftItems.map((it,i)=>compraItemRowHTML(it,i)).join('');
     rebindCompraItemRows();
@@ -2584,4 +2707,3 @@ function setStorageModeNote(){
 </script>
 </body>
 </html>
-
