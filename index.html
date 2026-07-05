@@ -447,6 +447,9 @@ const FORMAS_PAGAMENTO = [
   {v:'cartao', label:'Cartão', icon:'💳'},
 ];
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function sortByName(arr){
+  return [...arr].sort((a,b)=>a.nome.localeCompare(b.nome, 'pt-BR', {sensitivity:'base'}));
+}
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function localDateISO(offsetDays=0){
   const d = new Date();
@@ -851,10 +854,10 @@ function emptyState(icon, big, small){
 // ---------- CLIENTES ----------
 let clienteFilter = '';
 function renderClientes(){
-  const filtered = clients.filter(c=>
+  const filtered = sortByName(clients.filter(c=>
     c.nome.toLowerCase().includes(clienteFilter.toLowerCase()) ||
     (c.telefone||'').includes(clienteFilter)
-  );
+  ));
   return `
     <div class="list-header">
       <h2>Clientes</h2>
@@ -890,10 +893,10 @@ function clientCardHTML(c){
 // ---------- FORNECEDORES ----------
 let fornecedorFilter = '';
 function renderFornecedores(){
-  const filtered = fornecedores.filter(f=>
+  const filtered = sortByName(fornecedores.filter(f=>
     f.nome.toLowerCase().includes(fornecedorFilter.toLowerCase()) ||
     (f.telefone||'').includes(fornecedorFilter)
-  );
+  ));
   return `
     <div class="list-header">
       <h2>Fornecedores</h2>
@@ -929,7 +932,7 @@ function fornecedorCardHTML(f){
 // ---------- PRODUTOS ----------
 let produtoFilter = '';
 function renderProdutos(){
-  const filtered = products.filter(p=>p.nome.toLowerCase().includes(produtoFilter.toLowerCase()));
+  const filtered = sortByName(products.filter(p=>p.nome.toLowerCase().includes(produtoFilter.toLowerCase())));
   return `
     <div class="list-header">
       <h2>Quadro de preços</h2>
@@ -1747,7 +1750,7 @@ function pedidoFormHTML(o){
         <div class="field"><label>Cliente</label>
           <select required id="f-cliente">
             <option value="">Selecione...</option>
-            ${clients.map(c=>`<option value="${c.id}" ${o.clienteId===c.id?'selected':''}>${escapeHtml(c.nome)}</option>`).join('')}
+            ${sortByName(clients).map(c=>`<option value="${c.id}" ${o.clienteId===c.id?'selected':''}>${escapeHtml(c.nome)}</option>`).join('')}
           </select>
         </div>
         <div class="field"><label>Data</label><input required type="date" id="f-data" value="${o.data}"></div>
@@ -1792,7 +1795,7 @@ function orderItemRowHTML(it, idx){
         <label class="item-separado-check"><input type="checkbox" data-item-separado="${idx}" ${it.separado?'checked':''}></label>
         <select data-item-produto="${idx}">
           <option value="">Produto...</option>
-          ${products.map(p=>`<option value="${p.id}" ${it.produtoId===p.id?'selected':''}>${escapeHtml(p.nome)} (${fmtMoney(p.preco)}/${p.unidade})</option>`).join('')}
+          ${sortByName(products).map(p=>`<option value="${p.id}" ${it.produtoId===p.id?'selected':''}>${escapeHtml(p.nome)} (${fmtMoney(p.preco)}/${p.unidade})</option>`).join('')}
         </select>
         <button type="button" class="remove-item" data-remove-item="${idx}">${ICON.trash}</button>
       </div>
@@ -1845,7 +1848,7 @@ function compraFormHTML(c){
         <div class="field"><label>Fornecedor</label>
           <select required id="f-fornecedor">
             <option value="">Selecione...</option>
-            ${fornecedores.map(f=>`<option value="${f.id}" ${c.fornecedorId===f.id?'selected':''}>${escapeHtml(f.nome)}</option>`).join('')}
+            ${sortByName(fornecedores).map(f=>`<option value="${f.id}" ${c.fornecedorId===f.id?'selected':''}>${escapeHtml(f.nome)}</option>`).join('')}
           </select>
         </div>
         <div class="field"><label>Data</label><input required type="date" id="f-data" value="${c.data}"></div>
@@ -1884,7 +1887,7 @@ function compraItemRowHTML(it, idx){
       <div class="oi-top">
         <select data-compra-item-produto="${idx}">
           <option value="">Produto...</option>
-          ${products.map(p=>`<option value="${p.id}" ${it.produtoId===p.id?'selected':''}>${escapeHtml(p.nome)}${p.custo?` (custo ${fmtMoney(p.custo)}/${p.unidade})`:''}</option>`).join('')}
+          ${sortByName(products).map(p=>`<option value="${p.id}" ${it.produtoId===p.id?'selected':''}>${escapeHtml(p.nome)}${p.custo?` (custo ${fmtMoney(p.custo)}/${p.unidade})`:''}</option>`).join('')}
         </select>
         <button type="button" class="remove-item" data-remove-compra-item="${idx}">${ICON.trash}</button>
       </div>
