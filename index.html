@@ -937,7 +937,8 @@ const ICON = {
   crate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 7 12 3 4 7l8 4 8-4Z"/><path d="M4 7v10l8 4"/><path d="M20 7v10l-8 4"/><path d="M12 11v10"/></svg>',
   phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.34 1.79.65 2.65a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.43-1.43a2 2 0 0 1 2.11-.45c.86.31 1.75.53 2.65.65A2 2 0 0 1 22 16.92Z"/></svg>',
   print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>',
-  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  checklist: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 7 2 2 3-3"/><path d="M9 7h12"/><path d="m3 15 2 2 3-3"/><path d="M9 15h12"/></svg>'
 };
 
 // ---------- RENDER ROOT ----------
@@ -1139,7 +1140,7 @@ function renderPedidos(){
         <option value="pago" ${pedidoFilter==='pago'?'selected':''}>Pagos</option>
       </select>
       <button class="btn primary" id="add-pedido-btn">${ICON.plus} Novo</button>
-      ${filtered.length>0 ? `<button class="btn ghost" id="print-list-btn">${ICON.print} Imprimir</button>` : ''}
+      ${filtered.length>0 ? `<button class="btn ghost" id="print-list-btn">${ICON.print} Imprimir</button><button class="btn ghost" id="print-list-pick-btn">${ICON.checklist} Separar</button>` : ''}
     </div>
     <div class="date-filter-row">
       <div class="quick-date-btns">
@@ -1175,6 +1176,7 @@ function orderCardHTML(o){
         <div class="name">${cliente ? escapeHtml(cliente.nome) : '(cliente removido)'} <span class="date-tag">· ${fmtDate(o.data)}</span></div>
         <div class="actions-row">
           <button class="icon-btn" data-print-pedido="${o.id}">${ICON.print}</button>
+          <button class="icon-btn" data-print-pedido-pick="${o.id}">${ICON.checklist}</button>
           <button class="icon-btn" data-edit-pedido="${o.id}">${ICON.edit}</button>
           <button class="icon-btn danger" data-del-pedido="${o.id}">${ICON.trash}</button>
         </div>
@@ -1619,6 +1621,52 @@ function buildOrderListReceiptBytes(list){
   add(escposCut());
   return b;
 }
+function buildOrderPickBytes(o){
+  const cliente = clients.find(c=>c.id===o.clienteId);
+  let b = [];
+  const add = arr => { b = b.concat(arr); };
+  add(escposInit());
+  add(escposAlign(1));
+  add(escposBold(true)); add(escposSize(1,1));
+  add(escposLine('TNK - P. 268'));
+  add(escposSize(0,0)); add(escposBold(false));
+  add(escposLine('Separação - ' + fmtDate(o.data)));
+  add(escposAlign(0));
+  add(escposLine('-'.repeat(32)));
+  add(escposBold(true)); add(escposSize(1,0));
+  add(escposLine(cliente ? cliente.nome : '(cliente removido)'));
+  add(escposSize(0,0)); add(escposBold(false));
+  add(escposLine('-'.repeat(32)));
+  o.itens.forEach(it=>{
+    add(escposLine(`[ ] ${it.qtd}${abbrevUnidade(it.unidade)} ${it.produtoNome}`));
+  });
+  add(escposFeed(3));
+  add(escposCut());
+  return b;
+}
+function buildOrderListPickBytes(list){
+  let b = [];
+  const add = arr => { b = b.concat(arr); };
+  add(escposInit());
+  add(escposAlign(1)); add(escposBold(true)); add(escposSize(1,1));
+  add(escposLine('TNK - P. 268'));
+  add(escposSize(0,0)); add(escposBold(false));
+  add(escposLine(`Separação - ${list.length} pedido(s)`));
+  add(escposAlign(0));
+  list.forEach(o=>{
+    const cliente = clients.find(c=>c.id===o.clienteId);
+    add(escposLine('-'.repeat(32)));
+    add(escposBold(true));
+    add(escposLine(cliente ? cliente.nome : '(removido)'));
+    add(escposBold(false));
+    o.itens.forEach(it=>{
+      add(escposLine(`[ ] ${it.qtd}${abbrevUnidade(it.unidade)} ${it.produtoNome}`));
+    });
+  });
+  add(escposFeed(3));
+  add(escposCut());
+  return b;
+}
 
 // ---------- IMPRESSÃO ----------
 async function printOrder(id){
@@ -1637,6 +1685,22 @@ async function printOrder(id){
     showToast('Falha ao imprimir via Bluetooth. Verifique a impressora.');
   }
 }
+async function printOrderPick(id){
+  const o = orders.find(x=>x.id===id);
+  if(!o) return;
+  if(!btConnected){
+    showToast('Nenhuma impressora conectada. Toque em "Selecionar/Reconectar impressora" no topo da lista de pedidos.');
+    return;
+  }
+  try{
+    showToast('Enviando para a impressora...');
+    await sendBytesToPrinter(buildOrderPickBytes(o));
+    showToast('Impresso!');
+  }catch(e){
+    console.error(e);
+    showToast('Falha ao imprimir via Bluetooth. Verifique a impressora.');
+  }
+}
 async function printOrderList(){
   if(lastFilteredOrders.length===0) return;
   if(!btConnected){
@@ -1646,6 +1710,21 @@ async function printOrderList(){
   try{
     showToast('Enviando para a impressora...');
     await sendBytesToPrinter(buildOrderListReceiptBytes(lastFilteredOrders));
+    showToast('Impresso!');
+  }catch(e){
+    console.error(e);
+    showToast('Falha ao imprimir via Bluetooth. Verifique a impressora.');
+  }
+}
+async function printOrderListPick(){
+  if(lastFilteredOrders.length===0) return;
+  if(!btConnected){
+    showToast('Nenhuma impressora conectada. Toque em "Selecionar/Reconectar impressora" no topo da lista de pedidos.');
+    return;
+  }
+  try{
+    showToast('Enviando para a impressora...');
+    await sendBytesToPrinter(buildOrderListPickBytes(lastFilteredOrders));
     showToast('Impresso!');
   }catch(e){
     console.error(e);
@@ -2132,8 +2211,13 @@ function attachContentEvents(){
   document.querySelectorAll('[data-print-pedido]').forEach(b=>b.addEventListener('click', ()=>{
     printOrder(b.dataset.printPedido);
   }));
+  document.querySelectorAll('[data-print-pedido-pick]').forEach(b=>b.addEventListener('click', ()=>{
+    printOrderPick(b.dataset.printPedidoPick);
+  }));
   const printListBtn = document.getElementById('print-list-btn');
   if(printListBtn) printListBtn.addEventListener('click', printOrderList);
+  const printListPickBtn = document.getElementById('print-list-pick-btn');
+  if(printListPickBtn) printListPickBtn.addEventListener('click', printOrderListPick);
   const printerSelectBtn = document.getElementById('printer-select-btn');
   if(printerSelectBtn) printerSelectBtn.addEventListener('click', selectAndPairPrinter);
   const printerReconnectBtn = document.getElementById('printer-reconnect-btn');
