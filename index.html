@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tnk - P. 268</title>
+<title>Tanaka - Box 268</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
@@ -392,7 +392,7 @@
     <div class="brand">
       <div class="crate">268</div>
       <div>
-        <h1>Tnk - P. 268</h1>
+        <h1>Tanaka - Box 268</h1>
         <span class="sub">Gestão da banca</span>
       </div>
     </div>
@@ -1555,7 +1555,7 @@ function buildOrderReceiptBytes(o){
   add(escposInit());
   add(escposAlign(1));
   add(escposBold(true)); add(escposSize(1,1));
-  add(escposLine('TNK - P. 268'));
+  add(escposLine('TANAKA - BOX 268'));
   add(escposSize(0,0)); add(escposBold(false));
   add(escposLine('Pedido - ' + fmtDate(o.data)));
   add(escposAlign(0));
@@ -1596,7 +1596,7 @@ function buildOrderListReceiptBytes(list){
   const add = arr => { b = b.concat(arr); };
   add(escposInit());
   add(escposAlign(1)); add(escposBold(true)); add(escposSize(1,1));
-  add(escposLine('TNK - P. 268'));
+  add(escposLine('TANAKA - BOX 268'));
   add(escposSize(0,0)); add(escposBold(false));
   add(escposLine(`Lista de pedidos - ${list.length} pedido(s)`));
   add(escposAlign(0));
@@ -1738,7 +1738,7 @@ function compraTextoWhatsapp(c){
     return `- ${i.qtd}${abbrevUnidade(i.unidade)} ${i.produtoNome} (${fmtMoney(i.custoUnit)}) = ${fmtMoney(i.qtd*i.custoUnit)}`;
   }).join('\n');
   const fp = formaPagamentoInfo(c.formaPagamento);
-  let txt = `*Tnk - P. 268*\n`;
+  let txt = `*Tanaka - Box 268*\n`;
   txt += `Compra - ${fmtDate(c.data)}\n`;
   txt += `Fornecedor: ${fornecedor ? fornecedor.nome : '(removido)'}\n\n`;
   txt += `${linhas}\n\n`;
@@ -1753,7 +1753,7 @@ function buildCompraReceiptBytes(c){
   add(escposInit());
   add(escposAlign(1));
   add(escposBold(true)); add(escposSize(1,1));
-  add(escposLine('TNK - P. 268'));
+  add(escposLine('TANAKA - BOX 268'));
   add(escposSize(0,0)); add(escposBold(false));
   add(escposLine('Compra - ' + fmtDate(c.data)));
   add(escposAlign(0));
@@ -1782,7 +1782,7 @@ function buildCompraListReceiptBytes(list){
   const add = arr => { b = b.concat(arr); };
   add(escposInit());
   add(escposAlign(1)); add(escposBold(true)); add(escposSize(1,1));
-  add(escposLine('TNK - P. 268'));
+  add(escposLine('TANAKA - BOX 268'));
   add(escposSize(0,0)); add(escposBold(false));
   add(escposLine(`Lista de compras - ${list.length} compra(s)`));
   add(escposAlign(0));
