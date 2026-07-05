@@ -1627,12 +1627,12 @@ function buildOrderPickBytes(o){
   const add = arr => { b = b.concat(arr); };
   add(escposInit());
   add(escposAlign(1));
-  add(escposBold(true)); add(escposSize(1,0));
+  add(escposBold(true)); add(escposSize(0,0));
   add(escposLine(fmtDate(o.data)));
-  add(escposSize(0,0)); add(escposBold(false));
+  add(escposBold(false));
   add(escposAlign(0));
   add(escposLine('-'.repeat(32)));
-  add(escposBold(true)); add(escposSize(1,0));
+  add(escposBold(true)); add(escposSize(1,1));
   add(escposLine(cliente ? cliente.nome : '(cliente removido)'));
   add(escposSize(0,0)); add(escposBold(false));
   add(escposLine('-'.repeat(32)));
@@ -1647,16 +1647,16 @@ function buildOrderListPickBytes(list){
   let b = [];
   const add = arr => { b = b.concat(arr); };
   add(escposInit());
-  add(escposAlign(1)); add(escposBold(true)); add(escposSize(1,0));
+  add(escposAlign(1)); add(escposBold(true)); add(escposSize(0,0));
   add(escposLine(list.length ? fmtDate(list[0].data) : ''));
-  add(escposSize(0,0)); add(escposBold(false));
+  add(escposBold(false));
   add(escposAlign(0));
   list.forEach(o=>{
     const cliente = clients.find(c=>c.id===o.clienteId);
     add(escposLine('-'.repeat(32)));
-    add(escposBold(true));
+    add(escposBold(true)); add(escposSize(1,1));
     add(escposLine(cliente ? cliente.nome : '(removido)'));
-    add(escposBold(false));
+    add(escposSize(0,0)); add(escposBold(false));
     o.itens.forEach(it=>{
       add(escposLine(`[ ] ${it.qtd}${abbrevUnidade(it.unidade)} ${it.produtoNome}`));
     });
