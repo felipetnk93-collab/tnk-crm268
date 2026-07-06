@@ -315,6 +315,10 @@
   .oi-field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:0.3px;color:var(--wood-light);font-weight:600;margin-bottom:3px;}
   .oi-field input{width:100%;}
   .oi-field input.needs-review{border-color:var(--corn);background:#FDF6E3;}
+  .unidade-filtro-select{
+    width:60px;flex-shrink:0;font-family:'Inter';font-size:12.5px;color:var(--wood);
+    background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 4px;cursor:pointer;
+  }
   .product-select-btn{
     flex:1;min-width:0;text-align:left;font-family:'Inter';font-size:13px;color:var(--wood);
     background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 9px;cursor:pointer;
@@ -501,7 +505,7 @@ function closeProductDropdown(){
 function normalizeSearch(s){
   return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 }
-function openProductDropdown(anchorEl, currentProdutoId, labelFn, onSelect){
+function openProductDropdown(anchorEl, currentProdutoId, labelFn, onSelect, unidadeFiltro){
   closeProductDropdown();
   const rect = anchorEl.getBoundingClientRect();
   const panel = document.createElement('div');
@@ -517,7 +521,7 @@ function openProductDropdown(anchorEl, currentProdutoId, labelFn, onSelect){
     panel.style.top = (rect.bottom + 4) + 'px';
   }
   panel.innerHTML = `
-    <input type="text" class="product-dropdown-search" placeholder="Buscar produto...">
+    <input type="text" class="product-dropdown-search" placeholder="${unidadeFiltro ? 'Buscar em '+abbrevUnidade(unidadeFiltro)+'...' : 'Buscar produto...'}">
     <div class="product-dropdown-list"></div>
   `;
   document.body.appendChild(panel);
@@ -527,10 +531,11 @@ function openProductDropdown(anchorEl, currentProdutoId, labelFn, onSelect){
 
   function renderList(filterText){
     const norm = normalizeSearch(filterText);
-    const filtered = sortByName(products).filter(p=>normalizeSearch(p.nome).includes(norm));
+    const base = unidadeFiltro ? products.filter(p=>p.unidade===unidadeFiltro) : products;
+    const filtered = sortByName(base).filter(p=>normalizeSearch(p.nome).includes(norm));
     listEl.innerHTML = filtered.length ? filtered.map(p=>`
       <div class="product-dropdown-item ${p.id===currentProdutoId?'selected':''}" data-pid="${p.id}">${escapeHtml(labelFn(p))}</div>
-    `).join('') : `<div class="product-dropdown-empty">Nenhum produto encontrado</div>`;
+    `).join('') : `<div class="product-dropdown-empty">${unidadeFiltro ? 'Nenhum produto em '+abbrevUnidade(unidadeFiltro) : 'Nenhum produto encontrado'}</div>`;
   }
   renderList('');
 
@@ -1176,6 +1181,7 @@ function orderCardHTML(o){
         <div class="name">${cliente ? escapeHtml(cliente.nome) : '(cliente removido)'} <span class="date-tag">· ${fmtDate(o.data)}</span></div>
         <div class="actions-row">
           <button class="icon-btn" data-print-pedido="${o.id}">${ICON.print}</button>
+          <button class="icon-btn" data-copy-pedido="${o.id}">${ICON.copy}</button>
           <button class="icon-btn" data-print-pedido-pick="${o.id}">${ICON.checklist}</button>
           <button class="icon-btn" data-edit-pedido="${o.id}">${ICON.edit}</button>
           <button class="icon-btn danger" data-del-pedido="${o.id}">${ICON.trash}</button>
@@ -1746,6 +1752,21 @@ function compraTextoWhatsapp(c){
   txt += `Pagamento: ${c.statusPagamento==='pago' ? 'Pago' : 'Pendente'}${fp ? ' ('+fp.label+')' : ''}`;
   return txt;
 }
+function pedidoTextoWhatsapp(o){
+  const cliente = clients.find(c=>c.id===o.clienteId);
+  const linhas = o.itens.map(i=>
+    `- ${i.qtd}${abbrevUnidade(i.unidade)} ${i.produtoNome} (${fmtMoney(i.precoUnit)}) = ${fmtMoney(i.qtd*i.precoUnit)}`
+  ).join('\n');
+  const fp = formaPagamentoInfo(o.formaPagamento);
+  let txt = `*Tanaka - Box 268*\n`;
+  txt += `Pedido - ${fmtDate(o.data)}\n`;
+  txt += `Cliente: ${cliente ? cliente.nome : '(removido)'}\n\n`;
+  txt += `${linhas}\n\n`;
+  txt += `*Total: ${fmtMoney(orderTotal(o))}*\n`;
+  txt += `Entregue: ${o.entregue ? 'Sim' : 'Não'}\n`;
+  txt += `Pagamento: ${o.statusPagamento==='pago' ? 'Pago' : 'Pendente'}${fp ? ' ('+fp.label+')' : ''}`;
+  return txt;
+}
 function buildCompraReceiptBytes(c){
   const fornecedor = fornecedores.find(f=>f.id===c.fornecedorId);
   let b = [];
@@ -1918,7 +1939,7 @@ let orderDraftItems = [];
 function pedidoFormHTML(o){
   const isEdit = !!o;
   o = o || {clienteId:'', data: todayISO(), entregue:false, statusPagamento:'pendente', formaPagamento:'', itens:[]};
-  orderDraftItems = o.itens.length ? JSON.parse(JSON.stringify(o.itens)) : [{produtoId:'',qtd:1,separado:false,precoUnit:''}];
+  orderDraftItems = o.itens.length ? JSON.parse(JSON.stringify(o.itens)) : [{produtoId:'',qtd:1,separado:false,precoUnit:'',unidadeFiltro:''}];
   if(clients.length===0){
     return `<h3>Novo pedido</h3>
       <div class="empty-state" style="padding:20px 0;">
@@ -1979,10 +2000,15 @@ function pedidoFormHTML(o){
 function orderItemRowHTML(it, idx){
   const p = products.find(pp=>pp.id===it.produtoId);
   const precoAtual = (it.precoUnit!==undefined && it.precoUnit!==null && it.precoUnit!=='') ? it.precoUnit : (p ? p.preco : '');
+  const unidadeFiltro = it.unidadeFiltro || '';
   return `
     <div class="order-item-row" data-row="${idx}">
       <div class="oi-top">
         <label class="item-separado-check"><input type="checkbox" data-item-separado="${idx}" ${it.separado?'checked':''}></label>
+        <select class="unidade-filtro-select" data-item-unidade-filtro="${idx}">
+          <option value="">Un.</option>
+          ${UNIDADES.map(u=>`<option value="${u}" ${unidadeFiltro===u?'selected':''}>${abbrevUnidade(u)}</option>`).join('')}
+        </select>
         <button type="button" class="product-select-btn ${!p?'placeholder':''}" data-item-produto-btn="${idx}">
           ${p ? escapeHtml(p.nome) + ' (' + fmtMoney(p.preco) + '/' + p.unidade + ')' : 'Produto...'}
         </button>
@@ -2015,7 +2041,7 @@ let compraDraftItems = [];
 function compraFormHTML(c){
   const isEdit = !!c;
   c = c || {fornecedorId:'', data: todayISO(), statusPagamento:'pendente', formaPagamento:'', itens:[]};
-  compraDraftItems = c.itens.length ? JSON.parse(JSON.stringify(c.itens)) : [{produtoId:'',qtd:1,custoUnit:''}];
+  compraDraftItems = c.itens.length ? JSON.parse(JSON.stringify(c.itens)) : [{produtoId:'',qtd:1,custoUnit:'',unidadeFiltro:''}];
   if(fornecedores.length===0){
     return `<h3>Nova compra</h3>
       <div class="empty-state" style="padding:20px 0;">
@@ -2071,9 +2097,14 @@ function compraFormHTML(c){
 function compraItemRowHTML(it, idx){
   const p = products.find(pp=>pp.id===it.produtoId);
   const custoAtual = (it.custoUnit!==undefined && it.custoUnit!==null && it.custoUnit!=='') ? it.custoUnit : (p ? (p.custo||'') : '');
+  const unidadeFiltro = it.unidadeFiltro || '';
   return `
     <div class="order-item-row" data-row="${idx}">
       <div class="oi-top">
+        <select class="unidade-filtro-select" data-compra-item-unidade-filtro="${idx}">
+          <option value="">Un.</option>
+          ${UNIDADES.map(u=>`<option value="${u}" ${unidadeFiltro===u?'selected':''}>${abbrevUnidade(u)}</option>`).join('')}
+        </select>
         <button type="button" class="product-select-btn ${!p?'placeholder':''}" data-compra-item-produto-btn="${idx}">
           ${p ? escapeHtml(p.nome) + (p.custo ? ' (custo '+fmtMoney(p.custo)+'/'+p.unidade+')' : '') : 'Produto...'}
         </button>
@@ -2208,6 +2239,29 @@ function attachContentEvents(){
   }));
   document.querySelectorAll('[data-print-pedido]').forEach(b=>b.addEventListener('click', ()=>{
     printOrder(b.dataset.printPedido);
+  }));
+  document.querySelectorAll('[data-copy-pedido]').forEach(b=>b.addEventListener('click', async ()=>{
+    const o = orders.find(x=>x.id===b.dataset.copyPedido);
+    if(!o) return;
+    const texto = pedidoTextoWhatsapp(o);
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        await navigator.clipboard.writeText(texto);
+      }else{
+        const ta = document.createElement('textarea');
+        ta.value = texto;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      showToast('Copiado! Agora é só colar no WhatsApp.');
+    }catch(e){
+      console.error(e);
+      showToast('Não consegui copiar automaticamente. Tente novamente.');
+    }
   }));
   document.querySelectorAll('[data-print-pedido-pick]').forEach(b=>b.addEventListener('click', ()=>{
     printOrderPick(b.dataset.printPedidoPick);
@@ -2384,9 +2438,15 @@ function bindPedidoForm(existing){
   });
 
   function rebindItemRows(){
+    document.querySelectorAll('[data-item-unidade-filtro]').forEach(sel=>{
+      sel.addEventListener('change', ()=>{
+        orderDraftItems[sel.dataset.itemUnidadeFiltro].unidadeFiltro = sel.value;
+      });
+    });
     document.querySelectorAll('[data-item-produto-btn]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const idx = btn.dataset.itemProdutoBtn;
+        const unidadeFiltro = orderDraftItems[idx].unidadeFiltro || '';
         openProductDropdown(btn, orderDraftItems[idx].produtoId, (p)=>`${p.nome} (${fmtMoney(p.preco)}/${p.unidade})`, (selectedId)=>{
           orderDraftItems[idx].produtoId = selectedId;
           const p = products.find(pp=>pp.id===selectedId);
@@ -2395,8 +2455,13 @@ function bindPedidoForm(existing){
           btn.classList.toggle('placeholder', !p);
           const precoInput = document.querySelector(`[data-item-preco="${idx}"]`);
           if(precoInput) precoInput.value = p ? p.preco : '';
+          if(p){
+            orderDraftItems[idx].unidadeFiltro = p.unidade;
+            const unidadeSel = document.querySelector(`[data-item-unidade-filtro="${idx}"]`);
+            if(unidadeSel) unidadeSel.value = p.unidade;
+          }
           recalcOrderTotal();
-        });
+        }, unidadeFiltro);
       });
     });
     document.querySelectorAll('[data-item-qtd]').forEach(inp=>{
@@ -2433,7 +2498,7 @@ function bindPedidoForm(existing){
 
   document.getElementById('add-item-row').addEventListener('click', ()=>{
     closeProductDropdown();
-    orderDraftItems.push({produtoId:'', qtd:1, separado:false, precoUnit:''});
+    orderDraftItems.push({produtoId:'', qtd:1, separado:false, precoUnit:'', unidadeFiltro:''});
     document.getElementById('order-items-wrap').innerHTML = orderDraftItems.map((it,i)=>orderItemRowHTML(it,i)).join('');
     rebindItemRows();
     recalcOrderTotal();
@@ -2479,9 +2544,15 @@ function bindCompraForm(existing){
   });
 
   function rebindCompraItemRows(){
+    document.querySelectorAll('[data-compra-item-unidade-filtro]').forEach(sel=>{
+      sel.addEventListener('change', ()=>{
+        compraDraftItems[sel.dataset.compraItemUnidadeFiltro].unidadeFiltro = sel.value;
+      });
+    });
     document.querySelectorAll('[data-compra-item-produto-btn]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const idx = btn.dataset.compraItemProdutoBtn;
+        const unidadeFiltro = compraDraftItems[idx].unidadeFiltro || '';
         openProductDropdown(btn, compraDraftItems[idx].produtoId, (p)=>`${p.nome}${p.custo?' (custo '+fmtMoney(p.custo)+'/'+p.unidade+')':''}`, (selectedId)=>{
           compraDraftItems[idx].produtoId = selectedId;
           const p = products.find(pp=>pp.id===selectedId);
@@ -2493,8 +2564,13 @@ function bindCompraForm(existing){
             custoInput.value = p ? (p.custo||0) : '';
             custoInput.classList.toggle('needs-review', compraItemPrecoPendente({custoUnit: custoInput.value}));
           }
+          if(p){
+            compraDraftItems[idx].unidadeFiltro = p.unidade;
+            const unidadeSel = document.querySelector(`[data-compra-item-unidade-filtro="${idx}"]`);
+            if(unidadeSel) unidadeSel.value = p.unidade;
+          }
           recalcCompraTotal();
-        });
+        }, unidadeFiltro);
       });
     });
     document.querySelectorAll('[data-compra-item-qtd]').forEach(inp=>{
@@ -2527,7 +2603,7 @@ function bindCompraForm(existing){
 
   document.getElementById('add-compra-item-row').addEventListener('click', ()=>{
     closeProductDropdown();
-    compraDraftItems.push({produtoId:'', qtd:1, custoUnit:''});
+    compraDraftItems.push({produtoId:'', qtd:1, custoUnit:'', unidadeFiltro:''});
     document.getElementById('compra-items-wrap').innerHTML = compraDraftItems.map((it,i)=>compraItemRowHTML(it,i)).join('');
     rebindCompraItemRows();
     recalcCompraTotal();
