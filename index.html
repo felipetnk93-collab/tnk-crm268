@@ -1088,6 +1088,7 @@ function productTagHTML(p){
 // ---------- PEDIDOS ----------
 let pedidoFilter = 'todos';
 let pedidoClienteFilterId = null;
+let pedidoSearch = '';
 let pedidoDateFrom = '';
 let pedidoDateTo = '';
 let lastFilteredOrders = [];
@@ -1126,6 +1127,15 @@ function renderPedidos(){
   if(pedidoFilter==='pago') filtered = filtered.filter(o=>o.statusPagamento==='pago');
   if(pedidoDateFrom) filtered = filtered.filter(o=>o.data>=pedidoDateFrom);
   if(pedidoDateTo) filtered = filtered.filter(o=>o.data<=pedidoDateTo);
+  if(pedidoSearch.trim()){
+    const norm = normalizeSearch(pedidoSearch);
+    filtered = filtered.filter(o=>{
+      const cliente = clients.find(c=>c.id===o.clienteId);
+      const clienteMatch = cliente && normalizeSearch(cliente.nome).includes(norm);
+      const itemMatch = o.itens.some(it=>normalizeSearch(it.produtoNome).includes(norm));
+      return clienteMatch || itemMatch;
+    });
+  }
   const clienteFiltrado = pedidoClienteFilterId ? clients.find(c=>c.id===pedidoClienteFilterId) : null;
   if(pedidoClienteFilterId) filtered = filtered.filter(o=>o.clienteId===pedidoClienteFilterId);
   lastFilteredOrders = filtered;
@@ -1137,6 +1147,7 @@ function renderPedidos(){
   return `
     <div class="list-header">
       <h2>Pedidos</h2>
+      <div class="search-box">${ICON.search}<input id="pedido-search" placeholder="Buscar cliente ou produto..." value="${escapeAttr(pedidoSearch)}"></div>
       <select class="status-select" id="pedido-filter">
         <option value="todos" ${pedidoFilter==='todos'?'selected':''}>Todos</option>
         <option value="nao_entregue" ${pedidoFilter==='nao_entregue'?'selected':''}>A entregar</option>
@@ -1225,6 +1236,7 @@ function formaPagamentoInfo(v){
 // ---------- COMPRAS ----------
 let compraFilter = 'todos';
 let compraFornecedorFilterId = null;
+let compraSearch = '';
 let compraDateFrom = '';
 let compraDateTo = '';
 let lastFilteredCompras = [];
@@ -1237,6 +1249,15 @@ function renderCompras(){
   if(compraFilter==='pago') filtered = filtered.filter(c=>c.statusPagamento==='pago');
   if(compraDateFrom) filtered = filtered.filter(c=>c.data>=compraDateFrom);
   if(compraDateTo) filtered = filtered.filter(c=>c.data<=compraDateTo);
+  if(compraSearch.trim()){
+    const norm = normalizeSearch(compraSearch);
+    filtered = filtered.filter(c=>{
+      const fornecedor = fornecedores.find(f=>f.id===c.fornecedorId);
+      const fornecedorMatch = fornecedor && normalizeSearch(fornecedor.nome).includes(norm);
+      const itemMatch = c.itens.some(it=>normalizeSearch(it.produtoNome).includes(norm));
+      return fornecedorMatch || itemMatch;
+    });
+  }
   const fornecedorFiltrado = compraFornecedorFilterId ? fornecedores.find(f=>f.id===compraFornecedorFilterId) : null;
   if(compraFornecedorFilterId) filtered = filtered.filter(c=>c.fornecedorId===compraFornecedorFilterId);
   lastFilteredCompras = filtered;
@@ -1248,6 +1269,7 @@ function renderCompras(){
   return `
     <div class="list-header">
       <h2>Compras</h2>
+      <div class="search-box">${ICON.search}<input id="compra-search" placeholder="Buscar fornecedor ou produto..." value="${escapeAttr(compraSearch)}"></div>
       <select class="status-select" id="compra-filter">
         <option value="todos" ${compraFilter==='todos'?'selected':''}>Todos</option>
         <option value="nao_pago" ${compraFilter==='nao_pago'?'selected':''}>A pagar</option>
@@ -2280,6 +2302,12 @@ function attachContentEvents(){
   if(printerDisconnectBtn) printerDisconnectBtn.addEventListener('click', disconnectThermalPrinter);
   const pedidoFilterSel = document.getElementById('pedido-filter');
   if(pedidoFilterSel) pedidoFilterSel.addEventListener('change', (e)=>{ pedidoFilter = e.target.value; render(); });
+  const pedidoSearchInput = document.getElementById('pedido-search');
+  if(pedidoSearchInput) pedidoSearchInput.addEventListener('input', (e)=>{
+    pedidoSearch = e.target.value; render();
+    const el = document.getElementById('pedido-search');
+    if(el){ el.focus(); el.setSelectionRange(pedidoSearch.length, pedidoSearch.length); }
+  });
   const pedidoDateFromInput = document.getElementById('pedido-date-from');
   if(pedidoDateFromInput) pedidoDateFromInput.addEventListener('change', (e)=>{ pedidoDateFrom = e.target.value; render(); });
   const pedidoDateToInput = document.getElementById('pedido-date-to');
@@ -2347,6 +2375,12 @@ function attachContentEvents(){
   }));
   const compraFilterSel = document.getElementById('compra-filter');
   if(compraFilterSel) compraFilterSel.addEventListener('change', (e)=>{ compraFilter = e.target.value; render(); });
+  const compraSearchInput = document.getElementById('compra-search');
+  if(compraSearchInput) compraSearchInput.addEventListener('input', (e)=>{
+    compraSearch = e.target.value; render();
+    const el = document.getElementById('compra-search');
+    if(el){ el.focus(); el.setSelectionRange(compraSearch.length, compraSearch.length); }
+  });
   const compraDateFromInput = document.getElementById('compra-date-from');
   if(compraDateFromInput) compraDateFromInput.addEventListener('change', (e)=>{ compraDateFrom = e.target.value; render(); });
   const compraDateToInput = document.getElementById('compra-date-to');
