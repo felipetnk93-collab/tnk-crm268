@@ -1363,7 +1363,7 @@ function compraCardHTML(c){
       <div class="order-items-checklist">
         ${c.itens.map(i=>`
           <div class="check-row" style="cursor:default;">
-            <span>${compraItemPrecoPendente(i) ? '⚠️ ' : ''}${i.qtd}${abbrevUnidade(i.unidade)} ${escapeHtml(i.produtoNome)}${compraItemPrecoPendente(i) ? ' — preço pendente' : ''}</span>
+            <span>${compraItemPrecoPendente(i) ? '⚠️ ' : ''}${i.qtd}${abbrevUnidade(i.unidade)} ${escapeHtml(i.produtoNome)}${compraItemPrecoPendente(i) ? ' — preço pendente' : ` — ${fmtMoney(i.custoUnit)} = ${fmtMoney(i.qtd*i.custoUnit)}`}</span>
           </div>
         `).join('')}
       </div>
