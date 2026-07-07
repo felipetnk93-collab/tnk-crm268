@@ -688,6 +688,7 @@ let syncUrl = null;
 let lastSyncedTimestamp = 0;
 let syncing = false;
 let cloudPushTimer = null;
+let pendingLocalChanges = false;
 
 function cleanSyncUrl(u){
   return String(u||'').trim().replace(/\/+$/,'');
@@ -711,6 +712,8 @@ function updateSyncCloudStatusUI(){
   el.style.display = 'block';
   if(syncing){
     el.textContent = 'Sincronizando com a nuvem...';
+  }else if(pendingLocalChanges){
+    el.textContent = 'Alterações aguardando conexão para sincronizar...';
   }else if(lastSyncedTimestamp){
     const d = new Date(lastSyncedTimestamp);
     const hh = String(d.getHours()).padStart(2,'0');
@@ -722,6 +725,8 @@ function updateSyncCloudStatusUI(){
 }
 function scheduleCloudPush(){
   if(!syncUrl) return;
+  pendingLocalChanges = true;
+  updateSyncCloudStatusUI();
   clearTimeout(cloudPushTimer);
   cloudPushTimer = setTimeout(()=>{ pushToCloud(); }, 1500);
 }
@@ -740,6 +745,7 @@ async function pushToCloud(){
     });
     if(res.ok){
       await saveSyncTimestamp(ts);
+      pendingLocalChanges = false;
       ok = true;
     }
   }catch(e){
@@ -750,6 +756,12 @@ async function pushToCloud(){
 }
 async function pullFromCloud(force){
   if(!syncUrl) return false;
+  // Se existem alterações locais ainda não confirmadas na nuvem, tenta enviá-las
+  // primeiro — nunca sobrescreve dados locais recentes com uma versão antiga da nuvem.
+  if(pendingLocalChanges){
+    const pushed = await pushToCloud();
+    if(!pushed) return false;
+  }
   syncing = true; updateSyncCloudStatusUI();
   let applied = false;
   try{
@@ -809,7 +821,7 @@ async function setupSyncUrl(url){
       showToast('Dados deste aparelho enviados para a nuvem.');
     }else if(remoteHasData && localHasData){
       const usarNuvem = confirm('Já existem dados neste aparelho E na nuvem.\n\nOK = usar os dados da nuvem (substitui os deste aparelho)\nCancelar = manter os dados deste aparelho (substitui os da nuvem)');
-      if(usarNuvem){ await pullFromCloud(true); } else { await pushToCloud(); }
+      if(usarNuvem){ pendingLocalChanges = false; await pullFromCloud(true); } else { await pushToCloud(); }
     }else{
       await saveSyncTimestamp(Date.now());
     }
@@ -827,9 +839,12 @@ async function disableSync(){
 }
 async function manualSyncNow(){
   if(!syncUrl) return;
-  await pullFromCloud(true);
-  await pushToCloud();
-  showToast('Sincronizado!');
+  const ok = await pullFromCloud(true);
+  if(pendingLocalChanges){
+    showToast('Sem conexão estável agora — vamos continuar tentando sozinho.', 4000);
+  }else{
+    showToast('Sincronizado!');
+  }
 }
 
 // ---------- SAVE QUEUE WITH BACKGROUND RETRY (modo Claude) ----------
