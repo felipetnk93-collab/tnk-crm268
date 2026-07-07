@@ -1201,7 +1201,11 @@ function renderPedidos(){
     <div class="printer-status-bar">${renderPrinterStatusBar()}</div>
     ${clienteFiltrado ? `
       <div class="filter-banner">
-        Mostrando pedidos de <strong>${escapeHtml(clienteFiltrado.nome)}</strong>
+        <div style="flex:1;min-width:180px;">
+          Mostrando pedidos de <strong>${escapeHtml(clienteFiltrado.nome)}</strong>
+          ${clienteTotalPendente(clienteFiltrado.id)>0.001 ? `<br><span style="color:var(--tomato-dark);font-weight:600;">Pendente: ${fmtMoney(clienteTotalPendente(clienteFiltrado.id))}</span>` : ''}
+        </div>
+        ${clienteTotalPendente(clienteFiltrado.id)>0.001 ? `<button class="btn primary small" data-registrar-pagamento="${clienteFiltrado.id}">${ICON.money} Registrar pagamento</button>` : ''}
         <button id="clear-cliente-filter" class="link-btn">ver todos os pedidos</button>
       </div>
     ` : ''}
