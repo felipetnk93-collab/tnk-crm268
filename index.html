@@ -304,6 +304,8 @@
   }
   .field input:focus, .field select:focus, .field textarea:focus{border-color:var(--tomato);}
   .field textarea{resize:vertical;min-height:56px;}
+  .password-field-wrap{display:flex;gap:6px;align-items:center;}
+  .password-field-wrap input{flex:1;min-width:0;}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 
   .order-item-row{
@@ -965,7 +967,8 @@ const ICON = {
   print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>',
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
   checklist: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 7 2 2 3-3"/><path d="M9 7h12"/><path d="m3 15 2 2 3-3"/><path d="M9 15h12"/></svg>',
-  money: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 8h4a2 2 0 0 1 0 4H9"/><path d="M9 12h4a2 2 0 0 1 0 4H9"/><path d="M12 6v2"/><path d="M12 16v2"/></svg>'
+  money: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 8h4a2 2 0 0 1 0 4H9"/><path d="M9 12h4a2 2 0 0 1 0 4H9"/><path d="M12 6v2"/><path d="M12 16v2"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>'
 };
 
 // ---------- RENDER ROOT ----------
@@ -1217,6 +1220,9 @@ function renderPedidos(){
 function orderTotal(o){
   return o.itens.reduce((s,i)=>s + (i.qtd*i.precoUnit), 0);
 }
+function orderItemPrecoPendente(it){
+  return !it.precoUnit || Number(it.precoUnit) <= 0;
+}
 function orderCardHTML(o){
   const cliente = clients.find(c=>c.id===o.clienteId);
   return `
@@ -1235,7 +1241,7 @@ function orderCardHTML(o){
         ${o.itens.map((it,idx)=>({it,idx})).sort((a,b)=>(b.it.separado?1:0)-(a.it.separado?1:0)).map(({it,idx})=>`
           <label class="check-row ${it.separado?'checked-row':''}">
             <input type="checkbox" data-toggle-item-order="${o.id}" data-toggle-item-idx="${idx}" ${it.separado?'checked':''}>
-            <span>${it.qtd}${abbrevUnidade(it.unidade)} ${escapeHtml(it.produtoNome)}</span>
+            <span>${orderItemPrecoPendente(it) ? '⚠️ ' : ''}${it.qtd}${abbrevUnidade(it.unidade)} ${escapeHtml(it.produtoNome)}${orderItemPrecoPendente(it) ? ' — preço pendente' : ` — ${fmtMoney(it.precoUnit)} = ${fmtMoney(it.qtd*it.precoUnit)}`}</span>
           </label>
         `).join('')}
       </div>
@@ -2855,11 +2861,14 @@ function syncConfigModalHTML(){
   return `
     <h3>Sincronizar entre aparelhos</h3>
     <p style="font-size:12.5px;color:var(--wood-light);line-height:1.5;margin-bottom:12px;">
-      Cole aqui a URL do banco de dados (Firebase Realtime Database) — a mesma URL deve ser colada em todos os aparelhos que você quer manter sincronizados (celular, notebook, etc.).
+      Cole aqui a URL do banco de dados (Firebase Realtime Database) — a mesma URL deve ser colada em todos os aparelhos que você quer manter sincronizados (celular, notebook, etc.). Essa URL funciona como uma senha — fica escondida na tela por segurança.
     </p>
     <div class="field">
       <label>URL do banco de dados</label>
-      <input type="text" id="sync-url-input" placeholder="https://seu-projeto-default-rtdb.firebaseio.com" value="${escapeAttr(syncUrl||'')}">
+      <div class="password-field-wrap">
+        <input type="password" id="sync-url-input" placeholder="https://seu-projeto-default-rtdb.firebaseio.com" value="${escapeAttr(syncUrl||'')}" autocomplete="off">
+        <button type="button" class="icon-btn small" id="toggle-sync-url-visibility">${ICON.eye}</button>
+      </div>
     </div>
     <div style="font-size:12px;color:var(--wood-light);margin-bottom:10px;">
       ${syncUrl ? '🟢 Sincronização ativa.' : '⚪ Sincronização desativada.'}
@@ -2875,6 +2884,11 @@ function syncConfigModalHTML(){
 document.getElementById('sync-config-btn').addEventListener('click', ()=>{
   openModal(syncConfigModalHTML());
   document.getElementById('cancel-modal').addEventListener('click', closeModal);
+  const toggleBtn = document.getElementById('toggle-sync-url-visibility');
+  if(toggleBtn) toggleBtn.addEventListener('click', ()=>{
+    const input = document.getElementById('sync-url-input');
+    input.type = input.type==='password' ? 'text' : 'password';
+  });
   const saveBtn = document.getElementById('sync-save-btn');
   if(saveBtn) saveBtn.addEventListener('click', async ()=>{
     const val = document.getElementById('sync-url-input').value;
