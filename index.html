@@ -201,6 +201,11 @@
     padding:5px 6px;background:#fff;color:var(--wood);
   }
   .order-card{flex-direction:column;align-items:stretch;gap:10px;}
+  .order-card.aguardando-retirada{border:2px solid var(--corn);background:#FFFCF3;}
+  .aguardando-retirada-badge{
+    background:#FDF1D6;color:#8A6416;font-size:12px;font-weight:700;
+    padding:6px 10px;border-radius:8px;text-align:center;
+  }
   .order-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
   .order-card-top .name{font-weight:700;color:var(--chalk);font-size:15px;}
   .order-card-top .date-tag{font-weight:400;color:var(--wood-light);font-size:12px;}
@@ -794,7 +799,7 @@ async function pullFromCloud(force){
           compras = remoteCompras;
           migrateOrdersIfNeeded();
           migrateComprasIfNeeded();
-          await Promise.all([
+                await Promise.all([
             safeSet('ceasa_clients', clients), safeSet('ceasa_products', products), safeSet('ceasa_orders', orders),
             safeSet('ceasa_fornecedores', fornecedores), safeSet('ceasa_compras', compras)
           ]);
@@ -1157,6 +1162,7 @@ function renderPedidos(){
   if(pedidoFilter==='entregue') filtered = filtered.filter(o=>o.entregue);
   if(pedidoFilter==='nao_pago') filtered = filtered.filter(o=>o.statusPagamento!=='pago');
   if(pedidoFilter==='pago') filtered = filtered.filter(o=>o.statusPagamento==='pago');
+  if(pedidoFilter==='aguardando_retirada') filtered = filtered.filter(o=>o.statusPagamento==='pago' && !o.entregue);
   if(pedidoDateFrom) filtered = filtered.filter(o=>o.data>=pedidoDateFrom);
   if(pedidoDateTo) filtered = filtered.filter(o=>o.data<=pedidoDateTo);
   if(pedidoSearch.trim()){
@@ -1186,6 +1192,7 @@ function renderPedidos(){
         <option value="entregue" ${pedidoFilter==='entregue'?'selected':''}>Entregues</option>
         <option value="nao_pago" ${pedidoFilter==='nao_pago'?'selected':''}>A receber</option>
         <option value="pago" ${pedidoFilter==='pago'?'selected':''}>Pagos</option>
+        <option value="aguardando_retirada" ${pedidoFilter==='aguardando_retirada'?'selected':''}>📦 Pago, aguardando retirada</option>
       </select>
       <button class="btn primary" id="add-pedido-btn">${ICON.plus} Novo</button>
       ${filtered.length>0 ? `<button class="btn ghost" id="print-list-btn">${ICON.print} Imprimir</button><button class="btn ghost" id="print-list-pick-btn">${ICON.checklist} Separar</button>` : ''}
@@ -1225,8 +1232,9 @@ function orderItemPrecoPendente(it){
 }
 function orderCardHTML(o){
   const cliente = clients.find(c=>c.id===o.clienteId);
+  const aguardandoRetirada = o.statusPagamento==='pago' && !o.entregue;
   return `
-    <div class="item-card order-card">
+    <div class="item-card order-card ${aguardandoRetirada?'aguardando-retirada':''}">
       <div class="order-card-top">
         <div class="name">${cliente ? escapeHtml(cliente.nome) : '(cliente removido)'} <span class="date-tag">· ${fmtDate(o.data)}</span></div>
         <div class="actions-row">
@@ -1237,6 +1245,7 @@ function orderCardHTML(o){
           <button class="icon-btn danger" data-del-pedido="${o.id}">${ICON.trash}</button>
         </div>
       </div>
+      ${aguardandoRetirada ? `<div class="aguardando-retirada-badge">📦 Pago — mercadoria aguardando retirada</div>` : ''}
       <div class="order-items-checklist">
         ${o.itens.map((it,idx)=>({it,idx})).sort((a,b)=>(b.it.separado?1:0)-(a.it.separado?1:0)).map(({it,idx})=>`
           <label class="check-row ${it.separado?'checked-row':''}">
@@ -2680,6 +2689,11 @@ function bindPedidoForm(existing){
       orders.push({ id: uid(), clienteId, data, entregue, statusPagamento, formaPagamento, itens: itensValidos, valorPago, criadoEm: Date.now() });
     }
     await saveOrders();
+    pedidoFilter = 'todos';
+    pedidoDateFrom = '';
+    pedidoDateTo = '';
+    pedidoSearch = '';
+    pedidoClienteFilterId = null;
     showToast(existing?'Pedido atualizado.':'Pedido criado.');
     closeModal(); render();
   });
@@ -2784,6 +2798,11 @@ function bindCompraForm(existing){
       compras.push({ id: uid(), fornecedorId, data, statusPagamento, formaPagamento, itens: itensValidos, criadoEm: Date.now() });
     }
     await saveCompras();
+    compraFilter = 'todos';
+    compraDateFrom = '';
+    compraDateTo = '';
+    compraSearch = '';
+    compraFornecedorFilterId = null;
     showToast(existing?'Compra atualizada.':'Compra registrada.');
     closeModal(); render();
   });
@@ -2968,7 +2987,7 @@ document.getElementById('import-input').addEventListener('change', (e)=>{
       }
       migrateOrdersIfNeeded();
       migrateComprasIfNeeded();
-      await Promise.all([saveClients(), saveProducts(), saveOrders(), saveFornecedores(), saveCompras()]);
+        await Promise.all([saveClients(), saveProducts(), saveOrders(), saveFornecedores(), saveCompras()]);
       showToast('Dados importados com sucesso.');
       render();
     }catch(err){
