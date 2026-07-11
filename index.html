@@ -1914,9 +1914,9 @@ function buildOrderReceiptBytes(o){
   add(escposLine('Pedido - ' + fmtDate(o.data)));
   add(escposAlign(0));
   add(escposLine('-'.repeat(32)));
-  add(escposBold(true));
+  add(escposBold(true)); add(escposSize(1,1));
   add(escposLine(cliente ? cliente.nome : '(cliente removido)'));
-  add(escposBold(false));
+  add(escposSize(0,0)); add(escposBold(false));
   if(cliente && cliente.telefone) add(escposLine(cliente.telefone));
   add(escposLine('-'.repeat(32)));
   o.itens.forEach(it=>{
@@ -1942,6 +1942,11 @@ function buildOrderReceiptBytes(o){
     add(escposLine('Chave: ' + PIX_INFO.telefone));
     add(escposAlign(0));
   }
+  add(escposLine(''));
+  add(escposLine('-'.repeat(32)));
+  add(escposLine('Assinatura:'));
+  add(escposLine(''));
+  add(escposLine('_'.repeat(32)));
   add(escposFeed(3));
   add(escposCut());
   return b;
@@ -1960,9 +1965,9 @@ function buildOrderListReceiptBytes(list){
     const itensResumo = o.itens.map(i=>`${i.qtd}${abbrevUnidade(i.unidade)} ${i.produtoNome}`).join(', ');
     const fp = formaPagamentoInfo(o.formaPagamento);
     add(escposLine('-'.repeat(32)));
-    add(escposBold(true));
+    add(escposBold(true)); add(escposSize(1,0));
     add(escposLine(`${cliente ? cliente.nome : '(removido)'} - ${fmtDate(o.data)}`));
-    add(escposBold(false));
+    add(escposSize(0,0)); add(escposBold(false));
     add(escposLine(itensResumo));
     add(escposLine((o.entregue?'Entregue':'A entregar') + ' - ' + (o.statusPagamento==='pago'?'Pago':'Pendente') + (fp?' - '+fp.label:'')));
     add(escposLine(padLine('Total', fmtMoney(orderTotal(o)))));
@@ -2129,9 +2134,9 @@ function buildCompraReceiptBytes(c){
   add(escposLine('Compra - ' + fmtDate(c.data)));
   add(escposAlign(0));
   add(escposLine('-'.repeat(32)));
-  add(escposBold(true));
+  add(escposBold(true)); add(escposSize(1,1));
   add(escposLine(fornecedor ? fornecedor.nome : '(fornecedor removido)'));
-  add(escposBold(false));
+  add(escposSize(0,0)); add(escposBold(false));
   if(fornecedor && fornecedor.telefone) add(escposLine(fornecedor.telefone));
   add(escposLine('-'.repeat(32)));
   c.itens.forEach(it=>{
@@ -2144,6 +2149,11 @@ function buildCompraReceiptBytes(c){
   add(escposSize(0,0)); add(escposBold(false));
   const fp = formaPagamentoInfo(c.formaPagamento);
   add(escposLine('Pagto: ' + (c.statusPagamento==='pago' ? 'PAGO' : 'PENDENTE') + (fp ? ' - '+fp.label.toUpperCase() : '')));
+  add(escposLine(''));
+  add(escposLine('-'.repeat(32)));
+  add(escposLine('Assinatura:'));
+  add(escposLine(''));
+  add(escposLine('_'.repeat(32)));
   add(escposFeed(3));
   add(escposCut());
   return b;
@@ -2162,9 +2172,9 @@ function buildCompraListReceiptBytes(list){
     const itensResumo = c.itens.map(i=>`${i.qtd}${abbrevUnidade(i.unidade)} ${i.produtoNome}`).join(', ');
     const fp = formaPagamentoInfo(c.formaPagamento);
     add(escposLine('-'.repeat(32)));
-    add(escposBold(true));
+    add(escposBold(true)); add(escposSize(1,0));
     add(escposLine(`${fornecedor ? fornecedor.nome : '(removido)'} - ${fmtDate(c.data)}`));
-    add(escposBold(false));
+    add(escposSize(0,0)); add(escposBold(false));
     add(escposLine(itensResumo));
     add(escposLine((c.statusPagamento==='pago'?'Pago':'Pendente') + (fp?' - '+fp.label:'')));
     add(escposLine(padLine('Total', fmtMoney(compraTotal(c)))));
