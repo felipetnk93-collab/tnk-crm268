@@ -1667,73 +1667,6 @@ function bindDevolucaoCaixaModal(c){
 }
 
 // ---------- PIX (QR Code padrão Banco Central) ----------
-const LOGO_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAADoAAAA3CAIAAADSR86hAAAHg0lEQVR4AeyZTWgbRxiGN3FxqGnIGkNLTU0lCoIWAjLOJb5Eaq62sSnNwTlYe7HJyT/JKQlIgqSnxvItOD1YOtSFQLBc+1QIki/JpcEygYYaggUuDpSKCAw+BIL7jGazUnZHsyspOQRiXo+/+f7m3W9+dr178viD+jlpfFA/H+m+z+l6N9WtVo+Kxd2lpYep1EYjUJbLlXfIvyO6+XzJsnLh8PXe3vl4/M78/P10erMRKKV1YuIuzp3zbocutaSE8IBENvvIt374w1U6d8i4Zbo1ojcooS9LLzPLypVK+159cE0LdBlpcPAWRKlW8AGi0YFYLCKBHI8vthTuGigoXSYdrjB2xSu74+PRlZWp7e2bx8fLtIXCVQnkly8zptmjjAqiDESXSQS+6eCRTI5AaG3tSiIxTC0JKVcOirtPJKpHh2g6gT9diFJa3zHm5i7u7d1OpUYhXdrfTW3ci9+ZOTFzLnx9DEGidz6OBnnp4SqX4ZvT6+BDl43lyxV+zHUmcwmBKsJm8NZkevMesnc8NOjn7y/Ky0BGExw6upw+bCx9LmacorKTqBZEQXAGeOI/cfda8EXSlC7nlGXlfLkWCguyqIO3LjO83l9pzZeK4RtjrB+l1aVsSteystXqkcu7sRsK9Umu2UcbFCl4hRqTSJnY+OIMeWRX06rpcq8HmjBMbH/qSm2sXJquBmbP6eTINK3GB8bk8a2xmm46vaFJjYkDi1VLdsagq0EsMrR3+/fU6DQtssYTEzVmDyA0g4IudQXNAtCzDDiwEKxciqogKEE5M5cWCleXzVOvjYMULTIa9Ep/lGSzsrq5UtDN5R4TqQGlxcpSo7oISkQHIts3f527OGlU88bTsPEiLdpqHg16rMoolOxXMiMo4abL9tIftJSWOxa50pu/0CrBSt2+uRriZrs/bzyfMF5XhRstctlCjxUfoVT9ajK76eqXAcl5HqClAMpFRtmgwko1DovGX4PGv0s4v4VKVugPi/jgif9b1lqHzOzgmuhu3HS3tnbdLm/3p6bOo1jf2aJ1gYkuLCwLBhR1N268Krsc7C56rAcpPPEnytY3/FnfUeTH7qZb0j6PcnJxIBDmuvpQX7+9jYznxjNVUYlxgdX8bNA0nrP5iA319TfaXfkdk5fuP47NK0SjX6FkN9A6SAyPsnvEIXWQElyPSo7JR8Czdm3EkmE8GnP8OSJYEk7XEdx02WqOzStEowMoy/8d0AKOpLUrP69MJc1PKgbzS8HQtorayiEDqQA5ZYJy5YUUGls33UabVz5z5lOUMhHF4OSnFfuJXcXewtYeiCVDJUs2ykyxSVPa/5vWhdboymCz5zMWnKgE5z9nE+XhkJK2tlsylC1OPY45ljL5lZnaocteBvb5X80r87apJBv3lNrdRAzhydIOXXHsU1RASTwZ3YrukHE6ZgPZbfb0yUnmJjPWGt2dndq5wY6mDJ6B6gpz3BjIGN9uG0PHxtk9I1KwgYwGPdaeaN3fK3F/YRSP3k1X7n2Pm63gmV1Ip0Ki9f52mcaXScHvmzXj8znjDaHikwMJOwI9VkjDvi9hK71/mBOP0k2XRwKPT13BTUScdMwpqKtrEgMzfH/K6A6VDw6XVp/GZzZPnLsHECSQe+NZZKz44GmEVsTlMRu1HPWGS6p36pKb7oULkbpRJeXztbtA4wAUlXIycJdJFWETHvttfvExsjdB9fAVeqz4TFz7A1mQJhyQxwnom3LERsFNVz7BNHq45PX1HaH5Yla0/FKG77YNcxweDA9XwQB9AOSLZfytdJFYMoj17Uwac6XK4KYbCvUBlaeto7piBZOXjHBlG3WHSruV8Ngqw9tOrfzJbuwOXn5ABrHWuXJykrnLVOZw08VpdvYirQb2f/P9SVGPLlOMN/lAVEgTozWxjuMzG4IxLL9eEadKE38F3UTiPE9eTfyFmuf3Eg9uFLjLzBfLzKbQdvbL1dqMqS6km2RT0IXr7Oz3TfxttfXmFcT6VtlWdfwHxrlNn6dtBV3G5YUXpBGageryrhxrZmE4GulD6BzkySyIZ39NKjVduGYyP2rCMPElglVhnu4uLI/GhvrRdILEaIQ8vhnUdAlLJIZ9DzWWxBvGI8npIaLaA7EryRhX7hvelC6RvFLW35PxgXEqtYGQmh7aXv2h1TLjTxSxZAgCHV2WBIxp9Yk41/jCw2HM4issjwBmVh9CIfHBExCld2606ujiR3XleztkDfh3n08BlJknCgrGzB7/OQ0VZnlu8iwaCWQ06F8WEvig1ORUmnzoEgNjvinQImsAUcocDt9geXBu4AkbZpnNDj8JZDTosbYHf7rkDYXEu1HfnYcnpNl8VJoPg3xIo97ctKm9BDIalg2eSvgqA9ElCyuYN6QAga4v4A056g1pVrYEMg/4XLxveDOHoHRlPAXm1T6v9AKSllFOy4pi7zrdNoTW6DIARHlbCmkGZng0AYFzkF2rz9YyXZkO0txH2IJ8RYM3N+1YLOKdZZS48VEIT0CUDG+7bZOuMx4MJKFC4ere3k98pmwESnkxlNYJ6UTolG4nY7cR+5FuG0ULHPI/AAAA///TBFJKAAAABklEQVQDAHROXf3kIlHXAAAAAElFTkSuQmCC';
-let logoEscposBytes = null;
-function imageToEscposRasterDithered(img, targetWidth){
-  const scale = targetWidth / img.width;
-  const w = Math.max(1, Math.round(img.width * scale));
-  const h = Math.max(1, Math.round(img.height * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0,0,w,h);
-  ctx.drawImage(img, 0, 0, w, h);
-  const imgData = ctx.getImageData(0,0,w,h);
-  const data = imgData.data;
-
-  const gray = new Float32Array(w*h);
-  for(let i=0;i<w*h;i++){
-    const r=data[i*4], g=data[i*4+1], b=data[i*4+2], a=data[i*4+3];
-    const alpha = a/255;
-    const rr = r*alpha + 255*(1-alpha);
-    const gg = g*alpha + 255*(1-alpha);
-    const bb = b*alpha + 255*(1-alpha);
-    gray[i] = 0.299*rr + 0.587*gg + 0.114*bb;
-  }
-
-  const bytesPerRow = Math.ceil(w/8);
-  const raster = new Uint8Array(bytesPerRow*h);
-
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      const idx = y*w+x;
-      const old = gray[idx];
-      const newVal = old < 128 ? 0 : 255;
-      const err = old - newVal;
-      if(newVal===0){
-        const byteIdx = y*bytesPerRow + (x>>3);
-        raster[byteIdx] |= (0x80 >> (x&7));
-      }
-      if(x+1<w) gray[idx+1] += err*7/16;
-      if(y+1<h){
-        if(x-1>=0) gray[idx-1+w] += err*3/16;
-        gray[idx+w] += err*5/16;
-        if(x+1<w) gray[idx+1+w] += err*1/16;
-      }
-    }
-  }
-
-  const xL = bytesPerRow & 0xFF, xH = (bytesPerRow>>8)&0xFF;
-  const yL = h & 0xFF, yH = (h>>8)&0xFF;
-  return [0x1D,0x76,0x30,0x00,xL,xH,yL,yH].concat(Array.from(raster));
-}
-function prepareLogoBitmap(){
-  return new Promise((resolve)=>{
-    try{
-      const img = new Image();
-      img.onload = ()=>{
-        try{ logoEscposBytes = imageToEscposRasterDithered(img, 160); }
-        catch(e){ console.error('Falha ao preparar logo para impressão', e); logoEscposBytes = null; }
-        resolve();
-      };
-      img.onerror = ()=>{ logoEscposBytes = null; resolve(); };
-      img.src = 'data:image/png;base64,' + LOGO_BASE64;
-    }catch(e){ logoEscposBytes = null; resolve(); }
-  });
-}
 const PIX_INFO = {
   telefone: '15996324556',
   nome: 'Felipe Tanaka',
@@ -1980,7 +1913,6 @@ function buildOrderReceiptBytes(o){
   const add = arr => { b = b.concat(arr); };
   add(escposInit());
   add(escposAlign(1));
-  if(logoEscposBytes){ add(logoEscposBytes); }
   add(escposBold(true)); add(escposSize(1,1));
   add(escposLine('TANAKA - BOX 268'));
   add(escposSize(0,0)); add(escposBold(false));
@@ -2030,7 +1962,6 @@ function buildOrderListReceiptBytes(list){
   const add = arr => { b = b.concat(arr); };
   add(escposInit());
   add(escposAlign(1));
-  if(logoEscposBytes){ add(logoEscposBytes); }
   add(escposBold(true)); add(escposSize(1,1));
   add(escposLine('TANAKA - BOX 268'));
   add(escposSize(0,0)); add(escposBold(false));
@@ -2205,7 +2136,6 @@ function buildCompraReceiptBytes(c){
   const add = arr => { b = b.concat(arr); };
   add(escposInit());
   add(escposAlign(1));
-  if(logoEscposBytes){ add(logoEscposBytes); }
   add(escposBold(true)); add(escposSize(1,1));
   add(escposLine('TANAKA - BOX 268'));
   add(escposSize(0,0)); add(escposBold(false));
@@ -2242,7 +2172,6 @@ function buildCompraListReceiptBytes(list){
   const add = arr => { b = b.concat(arr); };
   add(escposInit());
   add(escposAlign(1));
-  if(logoEscposBytes){ add(logoEscposBytes); }
   add(escposBold(true)); add(escposSize(1,1));
   add(escposLine('TANAKA - BOX 268'));
   add(escposSize(0,0)); add(escposBold(false));
@@ -3508,7 +3437,6 @@ function setStorageModeNote(){
   await loadDeletePassword();
   render();
   tryAutoReconnectPrinter();
-  prepareLogoBitmap();
 
   await loadSyncConfig();
   if(syncUrl){
@@ -3531,4 +3459,3 @@ function setStorageModeNote(){
 </body>
 </html>
 
-  
