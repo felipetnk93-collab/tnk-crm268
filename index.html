@@ -1108,6 +1108,7 @@ const ICON = {
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
   checklist: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 7 2 2 3-3"/><path d="M9 7h12"/><path d="m3 15 2 2 3-3"/><path d="M9 15h12"/></svg>',
   money: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 8h4a2 2 0 0 1 0 4H9"/><path d="M9 12h4a2 2 0 0 1 0 4H9"/><path d="M12 6v2"/><path d="M12 16v2"/></svg>',
+  chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>',
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>'
 };
 
@@ -1238,6 +1239,78 @@ function renderProdutos(){
     `}
   `;
 }
+function historicoVendaProduto(produtoId){
+  const porData = {};
+  orders.forEach(o=>{
+    o.itens.filter(i=>i.produtoId===produtoId).forEach(i=>{
+      if(!porData[o.data]) porData[o.data] = [];
+      porData[o.data].push(Number(i.precoUnit)||0);
+    });
+  });
+  return Object.keys(porData).sort().map(data=>({
+    data,
+    preco: porData[data].reduce((s,v)=>s+v,0)/porData[data].length
+  }));
+}
+function buildPriceChartSVG(pontos, opts){
+  opts = opts || {};
+  const width = opts.width || 320;
+  const height = opts.height || 170;
+  const padding = {top:14, right:14, bottom:26, left:48};
+  const innerW = width - padding.left - padding.right;
+  const innerH = height - padding.top - padding.bottom;
+
+  if(pontos.length===0){
+    return `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg"><text x="${width/2}" y="${height/2}" text-anchor="middle" font-size="12" fill="#9a8b76">Sem vendas registradas ainda</text></svg>`;
+  }
+  const precos = pontos.map(p=>p.preco);
+  let minP = Math.min(...precos), maxP = Math.max(...precos);
+  if(minP===maxP){ minP = minP*0.85; maxP = maxP*1.15 || 1; }
+  const rangeP = maxP - minP;
+
+  const xStep = pontos.length>1 ? innerW/(pontos.length-1) : 0;
+  const coords = pontos.map((p,i)=>{
+    const x = padding.left + (pontos.length>1 ? i*xStep : innerW/2);
+    const y = padding.top + innerH - ((p.preco-minP)/rangeP)*innerH;
+    return {x,y};
+  });
+  const pathD = coords.map((c,i)=> (i===0?'M':'L') + c.x.toFixed(1) + ' ' + c.y.toFixed(1)).join(' ');
+
+  let gridLines = '';
+  for(let i=0;i<=3;i++){
+    const y = padding.top + (innerH/3)*i;
+    const val = maxP - (rangeP/3)*i;
+    gridLines += `<line x1="${padding.left}" y1="${y.toFixed(1)}" x2="${width-padding.right}" y2="${y.toFixed(1)}" stroke="#e5ddd0" stroke-width="1"/>`;
+    gridLines += `<text x="${padding.left-6}" y="${(y+3).toFixed(1)}" font-size="9" text-anchor="end" fill="#8a7d6a">${fmtMoney(val)}</text>`;
+  }
+
+  const pointsCircles = coords.map(c=>`<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="3" fill="#C6452C"/>`).join('');
+
+  const idxs = pontos.length<=1 ? [0] : Array.from(new Set([0, Math.floor((pontos.length-1)/2), pontos.length-1]));
+  const xLabels = idxs.map(i=>`<text x="${coords[i].x.toFixed(1)}" y="${height-8}" font-size="9" text-anchor="middle" fill="#8a7d6a">${fmtDate(pontos[i].data).slice(0,5)}</text>`).join('');
+
+  return `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    ${gridLines}
+    <path d="${pathD}" fill="none" stroke="#C6452C" stroke-width="2"/>
+    ${pointsCircles}
+    ${xLabels}
+  </svg>`;
+}
+function graficoPrecoModalHTML(p){
+  const pontos = historicoVendaProduto(p.id);
+  const svg = buildPriceChartSVG(pontos, {width:320, height:180});
+  const ultimo = pontos.length ? pontos[pontos.length-1].preco : null;
+  const primeiro = pontos.length ? pontos[0].preco : null;
+  return `
+    <h3>Histórico de preço de venda</h3>
+    <p style="font-size:13px;color:var(--wood-light);margin-bottom:10px;">${escapeHtml(p.nome)}</p>
+    <div style="background:#fff;border-radius:10px;padding:8px;">${svg}</div>
+    ${pontos.length>1 ? `<p style="font-size:12px;color:var(--wood-light);text-align:center;margin-top:8px;">Primeira venda: ${fmtMoney(primeiro)} · Mais recente: ${fmtMoney(ultimo)}</p>` : ''}
+    <div class="modal-actions" style="margin-top:14px;">
+      <button type="button" class="btn ghost" id="cancel-modal" style="flex:1;">Fechar</button>
+    </div>
+  `;
+}
 function productTagHTML(p){
   const custo = Number(p.custo)||0;
   const margem = p.preco - custo;
@@ -1252,6 +1325,7 @@ function productTagHTML(p){
         <div class="pmargem ${margem>=0?'pos':'neg'}">Margem: ${fmtMoney(margem)}${margemPct!==null?` (${margemPct}%)`:''}</div>
       ` : ''}
       <div class="tag-actions">
+        <button class="icon-btn small" data-ver-grafico="${p.id}" title="Ver histórico de preço">${ICON.chart}</button>
         <button class="icon-btn small" data-edit-produto="${p.id}">${ICON.edit}</button>
         <button class="icon-btn danger small" data-del-produto="${p.id}">${ICON.trash}</button>
       </div>
@@ -2605,6 +2679,12 @@ function attachContentEvents(){
     const p = products.find(x=>x.id===b.dataset.editProduto);
     openModal(produtoFormHTML(p)); bindProdutoForm(p);
   }));
+  document.querySelectorAll('[data-ver-grafico]').forEach(b=>b.addEventListener('click', ()=>{
+    const p = products.find(x=>x.id===b.dataset.verGrafico);
+    if(!p) return;
+    openModal(graficoPrecoModalHTML(p));
+    document.getElementById('cancel-modal').addEventListener('click', closeModal);
+  }));
   document.querySelectorAll('[data-del-produto]').forEach(b=>b.addEventListener('click', async ()=>{
     if(confirm('Remover este produto do quadro?')){
       products = products.filter(x=>x.id!==b.dataset.delProduto);
@@ -3459,3 +3539,4 @@ function setStorageModeNote(){
 </body>
 </html>
 
+  
