@@ -520,6 +520,134 @@ function closeProductDropdown(){
 function normalizeSearch(s){
   return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 }
+
+// ---------- INTERPRETAÇÃO DE PEDIDO POR VOZ / TEXTO ----------
+const NUMEROS_EXTENSO = {
+  'zero':0,'um':1,'uma':1,'dois':2,'duas':2,'tres':3,'quatro':4,'cinco':5,'seis':6,'sete':7,'oito':8,'nove':9,'dez':10,
+  'onze':11,'doze':12,'treze':13,'quatorze':14,'catorze':14,'quinze':15,'dezesseis':16,'dezessete':17,'dezoito':18,'dezenove':19,
+  'vinte':20,'trinta':30,'quarenta':40,'cinquenta':50,'sessenta':60,'setenta':70,'oitenta':80,'noventa':90,'cem':100,'cento':100
+};
+const UNIDADE_PALAVRAS = {
+  'kg':'kg','quilo':'kg','quilos':'kg','kilo':'kg','kilos':'kg',
+  'caixa':'caixa','caixas':'caixa','cx':'caixa',
+  'saca':'saca','sacas':'saca','sc':'saca',
+  'duzia':'dúzia','duzias':'dúzia','dz':'dúzia',
+  'maco':'maço','macos':'maço','mc':'maço',
+  'unidade':'unidade','unidades':'unidade','un':'unidade',
+  'bandeja':'bandeja','bandejas':'bandeja','bdj':'bandeja'
+};
+function parseNumeroTexto(s){
+  const clean = String(s).replace(',','.');
+  const asNum = parseFloat(clean);
+  if(!isNaN(asNum) && /^-?\d+([.,]\d+)?$/.test(clean)) return asNum;
+  const norm = normalizeSearch(s);
+  return NUMEROS_EXTENSO[norm];
+}
+function melhorMatchCliente(texto){
+  const norm = normalizeSearch(texto).trim();
+  if(!norm) return null;
+  let melhor = null, melhorScore = 0;
+  clients.forEach(c=>{
+    const nomeNorm = normalizeSearch(c.nome);
+    if(norm.includes(nomeNorm) || nomeNorm.includes(norm)){
+      const score = Math.min(nomeNorm.length, norm.length);
+      if(score > melhorScore){ melhorScore = score; melhor = c; }
+    }
+  });
+  return melhor;
+}
+function melhorMatchProduto(texto){
+  const norm = normalizeSearch(texto).trim();
+  if(!norm) return null;
+  let melhor = null, melhorScore = 0;
+  products.forEach(p=>{
+    const nomeNorm = normalizeSearch(p.nome);
+    if(norm.includes(nomeNorm) || nomeNorm.includes(norm)){
+      const score = Math.min(nomeNorm.length, norm.length);
+      if(score > melhorScore){ melhorScore = score; melhor = p; }
+    }
+  });
+  return melhor;
+}
+function parseItemTexto(texto){
+  const norm = normalizeSearch(texto);
+  const palavras = norm.split(/\s+/).filter(Boolean);
+
+  const numerosEncontrados = [];
+  palavras.forEach((p,idx)=>{
+    const n = parseNumeroTexto(p);
+    if(n!==undefined) numerosEncontrados.push({idx, valor:n});
+  });
+
+  let unidadeIdx = -1, unidade = '';
+  palavras.forEach((p,idx)=>{
+    if(UNIDADE_PALAVRAS[p]){ unidadeIdx = idx; unidade = UNIDADE_PALAVRAS[p]; }
+  });
+
+  let precoIdx = -1;
+  palavras.forEach((p,idx)=>{
+    if(p==='reais' || p==='real' || p==='rs' || p==='r$') precoIdx = idx;
+  });
+
+  let qtd = 1, preco = null;
+  if(numerosEncontrados.length===1){
+    if(precoIdx>=0) preco = numerosEncontrados[0].valor;
+    else qtd = numerosEncontrados[0].valor;
+  }else if(numerosEncontrados.length>=2){
+    qtd = numerosEncontrados[0].valor;
+    preco = numerosEncontrados[numerosEncontrados.length-1].valor;
+  }
+
+  const palavrasProduto = palavras.filter((p,idx)=>{
+    if(numerosEncontrados.some(n=>n.idx===idx)) return false;
+    if(idx===unidadeIdx) return false;
+    if(idx===precoIdx) return false;
+    if(['de','do','da','r$','preco','preço'].includes(p)) return false;
+    return true;
+  });
+  const nomeProdutoBusca = palavrasProduto.join(' ');
+  const produto = melhorMatchProduto(nomeProdutoBusca);
+
+  if(!produto){
+    return { produtoId:'', produtoNomeBusca: nomeProdutoBusca, unidade, qtd, precoUnit: preco!==null?preco:'' };
+  }
+  return {
+    produtoId: produto.id,
+    produtoNomeBusca: produto.nome,
+    unidade: produto.unidade,
+    qtd,
+    precoUnit: preco!==null ? preco : produto.preco
+  };
+}
+function parsePedidoTexto(texto){
+  const resultado = { clienteId: null, clienteNome: null, itens: [] };
+  const norm = normalizeSearch(texto).trim();
+
+  let melhorCliente = null, melhorLen = 0;
+  clients.forEach(c=>{
+    const nomeNorm = normalizeSearch(c.nome);
+    if(nomeNorm && norm.startsWith(nomeNorm) && nomeNorm.length > melhorLen){
+      melhorCliente = c; melhorLen = nomeNorm.length;
+    }
+  });
+
+  let restante = texto.trim();
+  if(melhorCliente){
+    resultado.clienteId = melhorCliente.id;
+    resultado.clienteNome = melhorCliente.nome;
+    restante = texto.trim().slice(melhorLen).replace(/^[\s,;.]+/, '');
+  }
+
+  let partes = restante.split(/,|;|\bpara\b/i).map(s=>s.trim()).filter(Boolean);
+  partes = partes.flatMap(p=>p.split(/\s+e\s+/i)).map(s=>s.trim()).filter(Boolean);
+
+  partes.forEach(parte=>{
+    const item = parseItemTexto(parte);
+    if(item && (item.produtoId || item.produtoNomeBusca)) resultado.itens.push(item);
+  });
+  return resultado;
+}
+
 function openProductDropdown(anchorEl, currentProdutoId, labelFn, onSelect, unidadeFiltro){
   closeProductDropdown();
   const rect = anchorEl.getBoundingClientRect();
@@ -1208,6 +1336,7 @@ function renderPedidos(){
         <option value="aguardando_retirada" ${pedidoFilter==='aguardando_retirada'?'selected':''}>📦 Pago, aguardando retirada</option>
       </select>
       <button class="btn primary" id="add-pedido-btn">${ICON.plus} Novo</button>
+      <button class="btn ghost" id="pedido-voz-btn">🎤 Pedido por voz</button>
       ${filtered.length>0 ? `<button class="btn ghost" id="print-list-btn">${ICON.print} Imprimir</button><button class="btn ghost" id="print-list-pick-btn">${ICON.checklist} Separar</button>` : ''}
     </div>
     <div class="date-filter-row">
@@ -2158,9 +2287,9 @@ function produtoFormHTML(p){
 }
 
 let orderDraftItems = [];
-function pedidoFormHTML(o){
+function pedidoFormHTML(o, prefill){
   const isEdit = !!o;
-  o = o || {clienteId:'', data: todayISO(), entregue:false, statusPagamento:'pendente', formaPagamento:'', itens:[]};
+  o = o || prefill || {clienteId:'', data: todayISO(), entregue:false, statusPagamento:'pendente', formaPagamento:'', itens:[]};
   orderDraftItems = o.itens.length ? JSON.parse(JSON.stringify(o.itens)) : [{produtoId:'',qtd:1,separado:false,precoUnit:'',unidadeFiltro:''}];
   if(clients.length===0){
     return `<h3>Novo pedido</h3>
@@ -2467,6 +2596,8 @@ function attachContentEvents(){
   // PEDIDOS
   const addPedido = document.getElementById('add-pedido-btn');
   if(addPedido) addPedido.addEventListener('click', ()=>{ openModal(pedidoFormHTML(null)); bindPedidoForm(null); });
+  const pedidoVozBtn = document.getElementById('pedido-voz-btn');
+  if(pedidoVozBtn) pedidoVozBtn.addEventListener('click', ()=>{ openModal(pedidoVozModalHTML()); bindPedidoVozModal(); });
   document.querySelectorAll('[data-edit-pedido]').forEach(b=>b.addEventListener('click', ()=>{
     const o = orders.find(x=>x.id===b.dataset.editPedido);
     openModal(pedidoFormHTML(o)); bindPedidoForm(o);
@@ -2760,6 +2891,88 @@ function bindProdutoForm(existing){
   });
 }
 
+function pedidoVozModalHTML(){
+  return `
+    <h3>Pedido por voz ou texto</h3>
+    <p style="font-size:12.5px;color:var(--wood-light);line-height:1.5;margin-bottom:10px;">
+      Fale ou digite: primeiro o <strong>nome do cliente</strong>, depois os <strong>produtos com o preço</strong>.<br>
+      Ex: <em>"João, tomate cinco reais, alface oito reais"</em>
+    </p>
+    <div class="field">
+      <textarea id="pedido-voz-texto" rows="4" placeholder="Toque no microfone e fale, ou digite aqui..."></textarea>
+    </div>
+    <div class="modal-actions" style="margin-bottom:10px;">
+      <button type="button" class="btn ghost" id="pedido-voz-mic-btn">🎤 Falar</button>
+    </div>
+    <div id="pedido-voz-status" style="font-size:12px;color:var(--wood-light);text-align:center;margin-bottom:10px;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="cancel-modal">Cancelar</button>
+      <button type="button" class="btn primary" id="pedido-voz-processar-btn">Processar</button>
+    </div>
+  `;
+}
+function bindPedidoVozModal(){
+  document.getElementById('cancel-modal').addEventListener('click', closeModal);
+  const textarea = document.getElementById('pedido-voz-texto');
+  const statusEl = document.getElementById('pedido-voz-status');
+  const micBtn = document.getElementById('pedido-voz-mic-btn');
+
+  const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognizing = false;
+  let recognition = null;
+  if(SpeechRecognitionAPI){
+    recognition = new SpeechRecognitionAPI();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.onstart = ()=>{ recognizing = true; micBtn.textContent = '⏹ Parar'; statusEl.textContent = 'Ouvindo...'; };
+    recognition.onerror = (e)=>{ statusEl.textContent = 'Erro ao ouvir: ' + e.error; };
+    recognition.onend = ()=>{ recognizing = false; micBtn.textContent = '🎤 Falar'; statusEl.textContent = ''; };
+    recognition.onresult = (e)=>{
+      let texto = '';
+      for(let i=0;i<e.results.length;i++){ texto += e.results[i][0].transcript; }
+      textarea.value = texto;
+    };
+    micBtn.addEventListener('click', ()=>{
+      if(recognizing){ recognition.stop(); }
+      else{ textarea.value=''; recognition.start(); }
+    });
+  }else{
+    micBtn.disabled = true;
+    micBtn.textContent = '🎤 Voz não suportada neste navegador';
+  }
+
+  document.getElementById('pedido-voz-processar-btn').addEventListener('click', ()=>{
+    if(recognizing && recognition) recognition.stop();
+    const texto = textarea.value.trim();
+    if(!texto){ showToast('Fale ou digite o pedido antes de processar.'); return; }
+    const parsed = parsePedidoTexto(texto);
+    if(!parsed.clienteId){
+      showToast('Não reconheci o cliente. Confira o nome falado/digitado ou selecione manualmente no formulário.', 5000);
+    }
+    const draftItens = parsed.itens.length ? parsed.itens.map(it=>({
+      produtoId: it.produtoId || '',
+      qtd: it.qtd || 1,
+      separado: false,
+      precoUnit: (it.precoUnit!==undefined && it.precoUnit!=='') ? it.precoUnit : '',
+      unidadeFiltro: it.unidade || ''
+    })) : [{produtoId:'',qtd:1,separado:false,precoUnit:'',unidadeFiltro:''}];
+    const naoReconhecidos = parsed.itens.filter(it=>!it.produtoId).length;
+    if(naoReconhecidos>0){
+      showToast(`${naoReconhecidos} produto(s) não foram reconhecidos — selecione manualmente no formulário.`, 5000);
+    }
+    const prefill = {
+      clienteId: parsed.clienteId || '',
+      data: todayISO(),
+      entregue: false,
+      statusPagamento: 'pendente',
+      formaPagamento: '',
+      itens: draftItens
+    };
+    openModal(pedidoFormHTML(null, prefill));
+    bindPedidoForm(null);
+  });
+}
 function bindPedidoForm(existing){
   const cancelBtn = document.getElementById('cancel-modal');
   if(cancelBtn) cancelBtn.addEventListener('click', closeModal);
