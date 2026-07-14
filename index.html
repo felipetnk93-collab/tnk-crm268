@@ -31,6 +31,17 @@
     -webkit-font-smoothing:antialiased;
   }
   .app{display:flex;min-height:100vh;flex-direction:column;}
+  .auth-gate{
+    position:fixed;inset:0;z-index:1000;background:var(--chalk);
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  }
+  .auth-box{
+    background:var(--paper);border-radius:14px;padding:28px 24px;width:100%;max-width:340px;
+    box-shadow:0 10px 40px rgba(0,0,0,0.3);
+  }
+  .auth-box h2{font-family:'Oswald';color:var(--tomato-dark);font-size:22px;text-align:center;margin-bottom:4px;}
+  .auth-sub{text-align:center;color:var(--wood-light);font-size:13px;margin-bottom:18px;}
+  .auth-error{color:var(--tomato-dark);font-size:12.5px;text-align:center;min-height:16px;margin-bottom:8px;}
 
   /* HEADER */
   header.topbar{
@@ -397,7 +408,18 @@
 </style>
 </head>
 <body>
+<div id="auth-gate" class="auth-gate" style="display:none;">
+  <div class="auth-box">
+    <h2>Tanaka - Box 268</h2>
+    <p class="auth-sub">Entre para continuar</p>
+    <div class="field"><label>E-mail</label><input type="email" id="auth-email-input" placeholder="seu@email.com" autocomplete="username"></div>
+    <div class="field"><label>Senha</label><input type="password" id="auth-password-input" placeholder="Senha" autocomplete="current-password"></div>
+    <div id="auth-error" class="auth-error"></div>
+    <button type="button" class="btn primary" id="auth-login-btn" style="width:100%;">Entrar</button>
+  </div>
+</div>
 <div class="app">
+
   <header class="topbar">
     <div class="brand">
       <img src="data:image/png;base64,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" alt="CEAGESP" class="brand-logo">
@@ -455,6 +477,8 @@
       <button id="reset-btn" class="link-btn danger-link">apagar todos os dados</button>
       <span class="dot">·</span>
       <button id="set-delete-password-btn" class="link-btn">proteger com senha</button>
+      <span class="dot">·</span>
+      <button id="logout-btn" class="link-btn">sair</button>
     </div>
   </footer>
 </div>
@@ -829,6 +853,83 @@ function scheduleSaveOrders(){
 }
 
 // ---------- SINCRONIZAÇÃO ENTRE APARELHOS (nuvem via Firebase Realtime Database) ----------
+// ---------- AUTENTICAÇÃO (Firebase Auth via REST) ----------
+const FIREBASE_API_KEY = 'AIzaSyCVAAV3Wg56LKi3cVXKyXvrkY-UtjWaq3w';
+let authIdToken = null;
+let authRefreshToken = null;
+let authExpiresAt = 0;
+let authEmail = null;
+
+async function saveAuthSession(){
+  await safeSet('ceasa_auth_session', { idToken: authIdToken, refreshToken: authRefreshToken, expiresAt: authExpiresAt, email: authEmail });
+}
+async function loadAuthSession(){
+  try{
+    const s = await safeGet('ceasa_auth_session');
+    if(s){
+      authIdToken = s.idToken; authRefreshToken = s.refreshToken; authExpiresAt = s.expiresAt; authEmail = s.email;
+    }
+  }catch(e){ /* sem sessão salva ainda */ }
+}
+async function signInWithEmailPassword(email, password){
+  const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ email, password, returnSecureToken: true })
+  });
+  const data = await res.json();
+  if(!res.ok){
+    const msg = (data.error && data.error.message) || 'Falha no login';
+    throw new Error(msg);
+  }
+  authIdToken = data.idToken;
+  authRefreshToken = data.refreshToken;
+  authExpiresAt = Date.now() + (Number(data.expiresIn)*1000 - 60000);
+  authEmail = data.email;
+  await saveAuthSession();
+}
+async function refreshIdToken(){
+  if(!authRefreshToken) return false;
+  try{
+    const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/x-www-form-urlencoded'},
+      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(authRefreshToken)}`
+    });
+    const data = await res.json();
+    if(!res.ok) return false;
+    authIdToken = data.id_token;
+    authRefreshToken = data.refresh_token;
+    authExpiresAt = Date.now() + (Number(data.expires_in)*1000 - 60000);
+    await saveAuthSession();
+    return true;
+  }catch(e){
+    console.error('Falha ao renovar sessão de login', e);
+    return false;
+  }
+}
+async function ensureValidIdToken(){
+  if(authIdToken && Date.now() < authExpiresAt) return true;
+  if(authRefreshToken) return await refreshIdToken();
+  return false;
+}
+async function signOutAuth(){
+  authIdToken = null; authRefreshToken = null; authExpiresAt = 0; authEmail = null;
+  await safeSet('ceasa_auth_session', null);
+}
+function showAuthGate(){
+  const gate = document.getElementById('auth-gate');
+  const app = document.querySelector('.app');
+  if(gate) gate.style.display = 'flex';
+  if(app) app.style.display = 'none';
+}
+function hideAuthGate(){
+  const gate = document.getElementById('auth-gate');
+  const app = document.querySelector('.app');
+  if(gate) gate.style.display = 'none';
+  if(app) app.style.display = '';
+}
+
 let syncUrl = null;
 let lastSyncedTimestamp = 0;
 let syncing = false;
@@ -880,9 +981,11 @@ async function pushToCloud(){
   syncing = true; updateSyncCloudStatusUI();
   let ok = false;
   try{
+    const validAuth = await ensureValidIdToken();
+    const authParam = validAuth ? `?auth=${authIdToken}` : '';
     const ts = Date.now();
     const payload = { clients, products, orders, fornecedores, compras, caixas, updatedAt: ts };
-    const res = await fetch(cleanSyncUrl(syncUrl) + '/data.json', {
+    const res = await fetch(cleanSyncUrl(syncUrl) + '/data.json' + authParam, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -910,7 +1013,9 @@ async function pullFromCloud(force){
   syncing = true; updateSyncCloudStatusUI();
   let applied = false;
   try{
-    const cacheBust = (syncUrl.includes('?') ? '&' : '?') + '_ts=' + Date.now();
+    const validAuth = await ensureValidIdToken();
+    const authParam = validAuth ? `&auth=${authIdToken}` : '';
+    const cacheBust = (syncUrl.includes('?') ? '&' : '?') + '_ts=' + Date.now() + authParam;
     const res = await fetch(cleanSyncUrl(syncUrl) + '/data.json' + cacheBust, { cache: 'no-store' });
     if(res.ok){
       const remote = await res.json();
@@ -956,7 +1061,9 @@ async function setupSyncUrl(url){
   if(!cleaned){ showToast('Cole a URL do banco de dados.'); return; }
   await saveSyncUrlConfig(cleaned);
   try{
-    const res = await fetch(cleanSyncUrl(syncUrl) + '/data.json', { cache: 'no-store' });
+    const validAuth = await ensureValidIdToken();
+    const authParam = validAuth ? `?auth=${authIdToken}` : '';
+    const res = await fetch(cleanSyncUrl(syncUrl) + '/data.json' + authParam, { cache: 'no-store' });
     const remote = res.ok ? await res.json() : null;
     const remoteHasData = !!(remote && ((remote.clients&&remote.clients.length) || (remote.products&&remote.products.length) || (remote.orders&&remote.orders.length) || (remote.fornecedores&&remote.fornecedores.length) || (remote.compras&&remote.compras.length) || (remote.caixas&&remote.caixas.length)));
     const localHasData = clients.length>0 || products.length>0 || orders.length>0 || fornecedores.length>0 || compras.length>0 || caixas.length>0;
@@ -3366,6 +3473,14 @@ document.getElementById('set-delete-password-btn').addEventListener('click', ()=
     closeModal();
   });
 });
+document.getElementById('logout-btn').addEventListener('click', async ()=>{
+  if(confirm('Sair da sua conta? Você vai precisar entrar de novo com e-mail e senha.')){
+    await signOutAuth();
+    document.getElementById('auth-email-input').value = '';
+    document.getElementById('auth-password-input').value = '';
+    showAuthGate();
+  }
+});
 
 // ---------- SINCRONIZAÇÃO ENTRE APARELHOS: modal ----------
 function syncConfigModalHTML(){
@@ -3509,7 +3624,36 @@ function setStorageModeNote(){
     ? 'Dados salvos na sua conta do Claude'
     : 'Dados salvos neste navegador/dispositivo — exporte backups regularmente';
 }
-(async function init(){
+async function bindAuthGate(){
+  const loginBtn = document.getElementById('auth-login-btn');
+  const errorEl = document.getElementById('auth-error');
+  const doLogin = async ()=>{
+    const email = document.getElementById('auth-email-input').value.trim();
+    const password = document.getElementById('auth-password-input').value;
+    if(!email || !password){ errorEl.textContent = 'Preencha e-mail e senha.'; return; }
+    loginBtn.disabled = true; loginBtn.textContent = 'Entrando...';
+    errorEl.textContent = '';
+    try{
+      await signInWithEmailPassword(email, password);
+      hideAuthGate();
+      await startAppAfterAuth();
+    }catch(e){
+      const msgMap = {
+        'INVALID_LOGIN_CREDENTIALS':'E-mail ou senha incorretos.',
+        'EMAIL_NOT_FOUND':'E-mail não encontrado.',
+        'INVALID_PASSWORD':'Senha incorreta.',
+        'USER_DISABLED':'Usuário desativado.',
+        'INVALID_EMAIL':'E-mail inválido.'
+      };
+      errorEl.textContent = msgMap[e.message] || 'Não consegui entrar. Verifique e-mail e senha.';
+    }
+    loginBtn.disabled = false; loginBtn.textContent = 'Entrar';
+  };
+  loginBtn.addEventListener('click', doLogin);
+  document.getElementById('auth-password-input').addEventListener('keydown', (e)=>{ if(e.key==='Enter') doLogin(); });
+}
+
+async function startAppAfterAuth(){
   setTodayLabel();
   setStorageModeNote();
   render();
@@ -3534,9 +3678,20 @@ function setStorageModeNote(){
       pullFromCloud(false);
     }
   });
+}
+
+(async function init(){
+  await bindAuthGate();
+  await loadAuthSession();
+  const validAuth = await ensureValidIdToken();
+  if(!validAuth){
+    showAuthGate();
+    return;
+  }
+  hideAuthGate();
+  await startAppAfterAuth();
 })();
 </script>
 </body>
 </html>
 
-  
