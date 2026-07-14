@@ -1351,7 +1351,6 @@ function renderProdutos(){
       <h2>Quadro de preços</h2>
       <div class="search-box">${ICON.search}<input id="produto-search" placeholder="Buscar produto..." value="${escapeAttr(produtoFilter)}"></div>
       <button class="btn primary" id="add-produto-btn">${ICON.plus} Novo</button>
-      <button class="btn ghost" id="margem-periodo-btn">${ICON.chart} Margem do período</button>
     </div>
     ${filtered.length===0 ? emptyState('crate','O quadro está vazio','Adicione os produtos que a banca vende, com o preço do dia.') : `
       <div class="tag-grid">
@@ -1360,70 +1359,6 @@ function renderProdutos(){
     `}
   `;
 }
-// ---------- MARGEM DE LUCRO DO PERÍODO ----------
-let margemDataFrom = '';
-let margemDataTo = '';
-function primeiroDiaMesISO(){
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
-}
-function calcularMargemPeriodo(dataFrom, dataTo){
-  const pedidosNoPeriodo = orders.filter(o=>(!dataFrom||o.data>=dataFrom)&&(!dataTo||o.data<=dataTo));
-  const comprasNoPeriodo = compras.filter(c=>(!dataFrom||c.data>=dataFrom)&&(!dataTo||c.data<=dataTo));
-  const totalVendido = pedidosNoPeriodo.reduce((s,o)=>s+orderTotal(o),0);
-  const totalComprado = comprasNoPeriodo.reduce((s,c)=>s+compraTotal(c),0);
-  const margemCaixa = totalVendido - totalComprado;
-  let margemEstimada = 0;
-  pedidosNoPeriodo.forEach(o=>{
-    o.itens.forEach(it=>{
-      const produto = products.find(p=>p.id===it.produtoId);
-      const custo = produto ? Number(produto.custo||0) : 0;
-      margemEstimada += (Number(it.precoUnit||0) - custo) * Number(it.qtd||0);
-    });
-  });
-  return { totalVendido, totalComprado, margemCaixa, margemEstimada, numPedidos: pedidosNoPeriodo.length, numCompras: comprasNoPeriodo.length };
-}
-function margemPeriodoModalHTML(){
-  if(!margemDataFrom && !margemDataTo) margemDataFrom = primeiroDiaMesISO();
-  const m = calcularMargemPeriodo(margemDataFrom, margemDataTo);
-  return `
-    <h3>Margem de lucro do período</h3>
-    <div class="row2">
-      <div class="field"><label>De</label><input type="date" id="margem-data-from" value="${margemDataFrom}"></div>
-      <div class="field"><label>Até</label><input type="date" id="margem-data-to" value="${margemDataTo}"></div>
-    </div>
-    <div id="margem-conteudo">${margemConteudoHTML(m)}</div>
-    <div class="modal-actions" style="margin-top:14px;">
-      <button type="button" class="btn ghost" id="cancel-modal" style="flex:1;">Fechar</button>
-    </div>
-  `;
-}
-function margemConteudoHTML(m){
-  return `
-    <div class="fechamento-resumo">
-      <div class="fechamento-linha"><span>Total vendido</span><span>${fmtMoney(m.totalVendido)}</span></div>
-      <div class="fechamento-linha"><span>Total comprado</span><span>${fmtMoney(m.totalComprado)}</span></div>
-      <div class="fechamento-linha destaque"><span>Margem (caixa)</span><span>${fmtMoney(m.margemCaixa)}</span></div>
-      <div class="fechamento-sep"></div>
-      <div class="fechamento-linha destaque"><span>Margem estimada</span><span>${fmtMoney(m.margemEstimada)}</span></div>
-      <div style="font-size:11px;color:var(--wood-light);margin-top:2px;">Baseada no preço de venda praticado menos o custo cadastrado de cada produto vendido no período.</div>
-      <div class="fechamento-sep"></div>
-      <div class="fechamento-linha"><span>Pedidos no período</span><span>${m.numPedidos}</span></div>
-      <div class="fechamento-linha"><span>Compras no período</span><span>${m.numCompras}</span></div>
-    </div>
-  `;
-}
-function bindMargemPeriodoModal(){
-  document.getElementById('cancel-modal').addEventListener('click', closeModal);
-  function atualizar(){
-    margemDataFrom = document.getElementById('margem-data-from').value;
-    margemDataTo = document.getElementById('margem-data-to').value;
-    document.getElementById('margem-conteudo').innerHTML = margemConteudoHTML(calcularMargemPeriodo(margemDataFrom, margemDataTo));
-  }
-  document.getElementById('margem-data-from').addEventListener('change', atualizar);
-  document.getElementById('margem-data-to').addEventListener('change', atualizar);
-}
-
 function historicoVendaProduto(produtoId){
   const porData = {};
   orders.forEach(o=>{
@@ -2881,8 +2816,6 @@ function attachContentEvents(){
   // PRODUTOS
   const addProduto = document.getElementById('add-produto-btn');
   if(addProduto) addProduto.addEventListener('click', ()=>{ openModal(produtoFormHTML(null)); bindProdutoForm(null); });
-  const margemPeriodoBtn = document.getElementById('margem-periodo-btn');
-  if(margemPeriodoBtn) margemPeriodoBtn.addEventListener('click', ()=>{ openModal(margemPeriodoModalHTML()); bindMargemPeriodoModal(); });
   document.querySelectorAll('[data-edit-produto]').forEach(b=>b.addEventListener('click', ()=>{
     const p = products.find(x=>x.id===b.dataset.editProduto);
     openModal(produtoFormHTML(p)); bindProdutoForm(p);
