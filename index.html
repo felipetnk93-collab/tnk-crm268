@@ -366,6 +366,19 @@
   .order-total .lbl{font-family:'Oswald',sans-serif;font-weight:600;font-size:12px;text-transform:uppercase;color:var(--wood-light);}
   .order-total .val{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:18px;color:var(--tomato);}
 
+  .fechamento-resumo{margin-top:14px;}
+  .fechamento-linha{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:var(--wood);}
+  .fechamento-linha.destaque{font-weight:700;font-size:16px;color:var(--tomato-dark);}
+  .fechamento-linha.atencao span:last-child{color:var(--tomato-dark);font-weight:700;}
+  .fechamento-sep{border-top:1px dashed var(--line);margin:8px 0;}
+  .atalhos-produtos{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+  .atalhos-label{font-size:11px;color:var(--wood-light);margin-right:2px;}
+  .atalho-produto-btn{
+    font-family:'Inter';font-size:12px;color:var(--sage);background:#EAF1E4;border:1px solid #CFE0C4;
+    border-radius:16px;padding:5px 12px;cursor:pointer;
+  }
+  .atalho-produto-btn:hover{background:#DCE8D3;}
+
   .modal-actions{display:flex;gap:10px;margin-top:18px;}
   .modal-actions button{flex:1;justify-content:center;}
 
@@ -1338,6 +1351,7 @@ function renderProdutos(){
       <h2>Quadro de preços</h2>
       <div class="search-box">${ICON.search}<input id="produto-search" placeholder="Buscar produto..." value="${escapeAttr(produtoFilter)}"></div>
       <button class="btn primary" id="add-produto-btn">${ICON.plus} Novo</button>
+      <button class="btn ghost" id="margem-periodo-btn">${ICON.chart} Margem do período</button>
     </div>
     ${filtered.length===0 ? emptyState('crate','O quadro está vazio','Adicione os produtos que a banca vende, com o preço do dia.') : `
       <div class="tag-grid">
@@ -1346,6 +1360,70 @@ function renderProdutos(){
     `}
   `;
 }
+// ---------- MARGEM DE LUCRO DO PERÍODO ----------
+let margemDataFrom = '';
+let margemDataTo = '';
+function primeiroDiaMesISO(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+}
+function calcularMargemPeriodo(dataFrom, dataTo){
+  const pedidosNoPeriodo = orders.filter(o=>(!dataFrom||o.data>=dataFrom)&&(!dataTo||o.data<=dataTo));
+  const comprasNoPeriodo = compras.filter(c=>(!dataFrom||c.data>=dataFrom)&&(!dataTo||c.data<=dataTo));
+  const totalVendido = pedidosNoPeriodo.reduce((s,o)=>s+orderTotal(o),0);
+  const totalComprado = comprasNoPeriodo.reduce((s,c)=>s+compraTotal(c),0);
+  const margemCaixa = totalVendido - totalComprado;
+  let margemEstimada = 0;
+  pedidosNoPeriodo.forEach(o=>{
+    o.itens.forEach(it=>{
+      const produto = products.find(p=>p.id===it.produtoId);
+      const custo = produto ? Number(produto.custo||0) : 0;
+      margemEstimada += (Number(it.precoUnit||0) - custo) * Number(it.qtd||0);
+    });
+  });
+  return { totalVendido, totalComprado, margemCaixa, margemEstimada, numPedidos: pedidosNoPeriodo.length, numCompras: comprasNoPeriodo.length };
+}
+function margemPeriodoModalHTML(){
+  if(!margemDataFrom && !margemDataTo) margemDataFrom = primeiroDiaMesISO();
+  const m = calcularMargemPeriodo(margemDataFrom, margemDataTo);
+  return `
+    <h3>Margem de lucro do período</h3>
+    <div class="row2">
+      <div class="field"><label>De</label><input type="date" id="margem-data-from" value="${margemDataFrom}"></div>
+      <div class="field"><label>Até</label><input type="date" id="margem-data-to" value="${margemDataTo}"></div>
+    </div>
+    <div id="margem-conteudo">${margemConteudoHTML(m)}</div>
+    <div class="modal-actions" style="margin-top:14px;">
+      <button type="button" class="btn ghost" id="cancel-modal" style="flex:1;">Fechar</button>
+    </div>
+  `;
+}
+function margemConteudoHTML(m){
+  return `
+    <div class="fechamento-resumo">
+      <div class="fechamento-linha"><span>Total vendido</span><span>${fmtMoney(m.totalVendido)}</span></div>
+      <div class="fechamento-linha"><span>Total comprado</span><span>${fmtMoney(m.totalComprado)}</span></div>
+      <div class="fechamento-linha destaque"><span>Margem (caixa)</span><span>${fmtMoney(m.margemCaixa)}</span></div>
+      <div class="fechamento-sep"></div>
+      <div class="fechamento-linha destaque"><span>Margem estimada</span><span>${fmtMoney(m.margemEstimada)}</span></div>
+      <div style="font-size:11px;color:var(--wood-light);margin-top:2px;">Baseada no preço de venda praticado menos o custo cadastrado de cada produto vendido no período.</div>
+      <div class="fechamento-sep"></div>
+      <div class="fechamento-linha"><span>Pedidos no período</span><span>${m.numPedidos}</span></div>
+      <div class="fechamento-linha"><span>Compras no período</span><span>${m.numCompras}</span></div>
+    </div>
+  `;
+}
+function bindMargemPeriodoModal(){
+  document.getElementById('cancel-modal').addEventListener('click', closeModal);
+  function atualizar(){
+    margemDataFrom = document.getElementById('margem-data-from').value;
+    margemDataTo = document.getElementById('margem-data-to').value;
+    document.getElementById('margem-conteudo').innerHTML = margemConteudoHTML(calcularMargemPeriodo(margemDataFrom, margemDataTo));
+  }
+  document.getElementById('margem-data-from').addEventListener('change', atualizar);
+  document.getElementById('margem-data-to').addEventListener('change', atualizar);
+}
+
 function historicoVendaProduto(produtoId){
   const porData = {};
   orders.forEach(o=>{
@@ -1514,6 +1592,7 @@ function renderPedidos(){
       </select>
       <button class="btn primary" id="add-pedido-btn">${ICON.plus} Novo</button>
       <button class="btn ghost" id="pedido-voz-btn">🎤 Pedido por voz</button>
+      <button class="btn ghost" id="fechamento-dia-btn">${ICON.money} Fechamento do dia</button>
       ${filtered.length>0 ? `<button class="btn ghost" id="print-list-btn">${ICON.print} Imprimir</button><button class="btn ghost" id="print-list-pick-btn">${ICON.checklist} Separar</button>` : ''}
     </div>
     <div class="date-filter-row">
@@ -2489,6 +2568,20 @@ function produtoFormHTML(p){
 }
 
 let orderDraftItems = [];
+function produtosMaisVendidos(limit){
+  const contagem = {};
+  orders.forEach(o=>{
+    o.itens.forEach(it=>{
+      contagem[it.produtoId] = (contagem[it.produtoId]||0) + Number(it.qtd||0);
+    });
+  });
+  return Object.keys(contagem)
+    .map(id=>({produtoId:id, qtd:contagem[id]}))
+    .sort((a,b)=>b.qtd-a.qtd)
+    .slice(0, limit)
+    .map(x=>products.find(p=>p.id===x.produtoId))
+    .filter(Boolean);
+}
 function pedidoFormHTML(o, prefill){
   const isEdit = !!o;
   o = o || prefill || {clienteId:'', data: todayISO(), entregue:false, statusPagamento:'pendente', formaPagamento:'', itens:[]};
@@ -2522,6 +2615,12 @@ function pedidoFormHTML(o, prefill){
       <div class="field"><label>Itens do pedido</label>
         <div id="order-items-wrap">${orderDraftItems.map((it,idx)=>orderItemRowHTML(it,idx)).join('')}</div>
         <button type="button" class="btn ghost small" id="add-item-row" style="margin-top:4px;">${ICON.plus} Adicionar item</button>
+        ${produtosMaisVendidos(6).length ? `
+          <div class="atalhos-produtos">
+            <span class="atalhos-label">Mais vendidos:</span>
+            ${produtosMaisVendidos(6).map(p=>`<button type="button" class="atalho-produto-btn" data-atalho-produto="${p.id}">${escapeHtml(p.nome)}</button>`).join('')}
+          </div>
+        ` : ''}
       </div>
       <div class="order-total"><span class="lbl">Total</span><span class="val" id="order-total-display">${fmtMoney(0)}</span></div>
       <div class="field">
@@ -2782,6 +2881,8 @@ function attachContentEvents(){
   // PRODUTOS
   const addProduto = document.getElementById('add-produto-btn');
   if(addProduto) addProduto.addEventListener('click', ()=>{ openModal(produtoFormHTML(null)); bindProdutoForm(null); });
+  const margemPeriodoBtn = document.getElementById('margem-periodo-btn');
+  if(margemPeriodoBtn) margemPeriodoBtn.addEventListener('click', ()=>{ openModal(margemPeriodoModalHTML()); bindMargemPeriodoModal(); });
   document.querySelectorAll('[data-edit-produto]').forEach(b=>b.addEventListener('click', ()=>{
     const p = products.find(x=>x.id===b.dataset.editProduto);
     openModal(produtoFormHTML(p)); bindProdutoForm(p);
@@ -2806,6 +2907,8 @@ function attachContentEvents(){
   if(addPedido) addPedido.addEventListener('click', ()=>{ openModal(pedidoFormHTML(null)); bindPedidoForm(null); });
   const pedidoVozBtn = document.getElementById('pedido-voz-btn');
   if(pedidoVozBtn) pedidoVozBtn.addEventListener('click', ()=>{ openModal(pedidoVozModalHTML()); bindPedidoVozModal(); });
+  const fechamentoDiaBtn = document.getElementById('fechamento-dia-btn');
+  if(fechamentoDiaBtn) fechamentoDiaBtn.addEventListener('click', ()=>{ openModal(fechamentoDiaModalHTML()); bindFechamentoDiaModal(); });
   document.querySelectorAll('[data-edit-pedido]').forEach(b=>b.addEventListener('click', ()=>{
     const o = orders.find(x=>x.id===b.dataset.editPedido);
     openModal(pedidoFormHTML(o)); bindPedidoForm(o);
@@ -3099,6 +3202,109 @@ function bindProdutoForm(existing){
   });
 }
 
+// ---------- FECHAMENTO DO DIA ----------
+let fechamentoData = localDateISO(0);
+function calcularFechamento(data){
+  const pedidosDoDia = orders.filter(o=>o.data===data);
+  const totalVendido = pedidosDoDia.reduce((s,o)=>s+orderTotal(o),0);
+  const totalRecebido = pedidosDoDia.reduce((s,o)=>s+Number(o.valorPago||0),0);
+  const totalPendente = totalVendido - totalRecebido;
+  const porForma = {};
+  pedidosDoDia.forEach(o=>{
+    const key = o.formaPagamento || 'não informado';
+    porForma[key] = (porForma[key]||0) + Number(o.valorPago||0);
+  });
+  const entregues = pedidosDoDia.filter(o=>o.entregue).length;
+  return { pedidosDoDia, totalVendido, totalRecebido, totalPendente, porForma, entregues };
+}
+function fechamentoDiaModalHTML(){
+  const f = calcularFechamento(fechamentoData);
+  return `
+    <h3>Fechamento do dia</h3>
+    <div class="field"><label>Data</label><input type="date" id="fechamento-data-input" value="${fechamentoData}"></div>
+    <div id="fechamento-conteudo">${fechamentoConteudoHTML(f)}</div>
+    <div class="modal-actions" style="margin-top:14px;">
+      <button type="button" class="btn ghost" id="cancel-modal">Fechar</button>
+      <button type="button" class="btn primary" id="imprimir-fechamento-btn">${ICON.print} Imprimir</button>
+    </div>
+  `;
+}
+function fechamentoConteudoHTML(f){
+  const formasTxt = Object.keys(f.porForma).map(k=>{
+    const fp = formaPagamentoInfo(k);
+    const label = fp ? `${fp.icon} ${fp.label}` : (k==='não informado' ? '❔ Não informado' : k);
+    return `<div class="fechamento-linha"><span>${label}</span><span>${fmtMoney(f.porForma[k])}</span></div>`;
+  }).join('');
+  return `
+    <div class="fechamento-resumo">
+      <div class="fechamento-linha destaque"><span>Total vendido</span><span>${fmtMoney(f.totalVendido)}</span></div>
+      <div class="fechamento-linha"><span>Total recebido</span><span>${fmtMoney(f.totalRecebido)}</span></div>
+      <div class="fechamento-linha ${f.totalPendente>0.001?'atencao':''}"><span>Pendente</span><span>${fmtMoney(f.totalPendente)}</span></div>
+      <div class="fechamento-sep"></div>
+      <div style="font-size:11.5px;color:var(--wood-light);margin-bottom:4px;">Por forma de pagamento</div>
+      ${formasTxt || '<div class="fechamento-linha"><span>—</span><span>—</span></div>'}
+      <div class="fechamento-sep"></div>
+      <div class="fechamento-linha"><span>Pedidos no dia</span><span>${f.pedidosDoDia.length}</span></div>
+      <div class="fechamento-linha"><span>Entregues</span><span>${f.entregues} de ${f.pedidosDoDia.length}</span></div>
+    </div>
+  `;
+}
+function buildFechamentoReceiptBytes(f, data){
+  let b = [];
+  const add = arr => { b = b.concat(arr); };
+  add(escposInit());
+  add(escposAlign(1)); add(escposBold(true)); add(escposSize(1,1));
+  add(escposLine('TANAKA - BOX 268'));
+  add(escposSize(0,0)); add(escposBold(false));
+  add(escposLine('CEAGESP - Sorocaba'));
+  add(escposLine('Fechamento - ' + fmtDate(data)));
+  add(escposAlign(0));
+  add(escposLine('-'.repeat(32)));
+  add(escposBold(true)); add(escposSize(1,0));
+  add(escposLine(padLine('TOTAL VENDIDO', fmtMoney(f.totalVendido))));
+  add(escposSize(0,0)); add(escposBold(false));
+  add(escposLine(padLine('Recebido', fmtMoney(f.totalRecebido))));
+  add(escposLine(padLine('Pendente', fmtMoney(f.totalPendente))));
+  add(escposLine('-'.repeat(32)));
+  add(escposLine('Por forma de pagamento:'));
+  Object.keys(f.porForma).forEach(k=>{
+    const fp = formaPagamentoInfo(k);
+    const label = fp ? fp.label : (k==='não informado' ? 'Não informado' : k);
+    add(escposLine(padLine('  '+label, fmtMoney(f.porForma[k]))));
+  });
+  add(escposLine('-'.repeat(32)));
+  add(escposLine(`Pedidos: ${f.pedidosDoDia.length}  |  Entregues: ${f.entregues}`));
+  add(escposFeed(3));
+  add(escposCut());
+  return b;
+}
+async function imprimirFechamento(data){
+  const f = calcularFechamento(data);
+  if(!btConnected){
+    showToast('Nenhuma impressora conectada. Toque em "Selecionar/Reconectar impressora" no topo da lista de pedidos.');
+    return;
+  }
+  try{
+    showToast('Enviando para a impressora...');
+    await sendBytesToPrinter(buildFechamentoReceiptBytes(f, data));
+    showToast('Impresso!');
+  }catch(e){
+    console.error(e);
+    showToast('Falha ao imprimir via Bluetooth. Verifique a impressora.');
+  }
+}
+function bindFechamentoDiaModal(){
+  document.getElementById('cancel-modal').addEventListener('click', closeModal);
+  const dataInput = document.getElementById('fechamento-data-input');
+  dataInput.addEventListener('change', ()=>{
+    fechamentoData = dataInput.value;
+    document.getElementById('fechamento-conteudo').innerHTML = fechamentoConteudoHTML(calcularFechamento(fechamentoData));
+  });
+  document.getElementById('imprimir-fechamento-btn').addEventListener('click', ()=>{
+    imprimirFechamento(fechamentoData);
+  });
+}
+
 function pedidoVozModalHTML(){
   return `
     <h3>Pedido por voz ou texto</h3>
@@ -3260,6 +3466,18 @@ function bindPedidoForm(existing){
     rebindItemRows();
     recalcOrderTotal();
   });
+  document.querySelectorAll('[data-atalho-produto]').forEach(b=>b.addEventListener('click', ()=>{
+    closeProductDropdown();
+    const p = products.find(pp=>pp.id===b.dataset.atalhoProduto);
+    if(!p) return;
+    // se o unico item ainda estiver vazio, preenche ele em vez de criar um novo
+    const vazio = orderDraftItems.length===1 && !orderDraftItems[0].produtoId;
+    const novoItem = { produtoId: p.id, qtd: 1, separado:false, precoUnit: p.preco, unidadeFiltro: p.unidade };
+    if(vazio){ orderDraftItems[0] = novoItem; } else { orderDraftItems.push(novoItem); }
+    document.getElementById('order-items-wrap').innerHTML = orderDraftItems.map((it,i)=>orderItemRowHTML(it,i)).join('');
+    rebindItemRows();
+    recalcOrderTotal();
+  }));
 
   form.addEventListener('submit', async (e)=>{
     e.preventDefault();
