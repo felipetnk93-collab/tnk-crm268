@@ -258,8 +258,8 @@
     background:#fff;cursor:pointer;
   }
   .checkbox-field input{width:16px;height:16px;accent-color:var(--tomato);cursor:pointer;}
-  .item-separado-check{display:flex;align-items:center;justify-content:center;}
-  .item-separado-check input{width:16px;height:16px;accent-color:var(--sage);cursor:pointer;}
+  .item-separado-check{display:flex;align-items:center;justify-content:center;padding:8px 6px;margin:-8px -6px;cursor:pointer;}
+  .item-separado-check input{width:20px;height:20px;accent-color:var(--sage);cursor:pointer;}
 
   .printer-status-bar{margin-bottom:14px;}
   .printer-pill{
@@ -1221,6 +1221,20 @@ function showToast(msg, duration){
   toastTimer = setTimeout(()=>t.classList.remove('show'), duration || 2200);
 }
 
+// ---------- CAPTURA GLOBAL DE ERROS (avisa o usuário se algo travar silenciosamente) ----------
+let lastErrorToastAt = 0;
+function avisarErroInesperado(origem, err){
+  console.error('Erro inesperado (' + origem + ')', err);
+  const agora = Date.now();
+  if(agora - lastErrorToastAt < 3000) return; // evita empilhar vários avisos seguidos
+  lastErrorToastAt = agora;
+  try{
+    showToast('Ops, algo deu errado e a ação pode não ter sido concluída. Tente de novo — se persistir, avise.', 6000);
+  }catch(e){ /* nem o toast funcionou, nao ha mais o que fazer aqui */ }
+}
+window.addEventListener('error', (e)=>{ avisarErroInesperado('script', e.error || e.message); });
+window.addEventListener('unhandledrejection', (e)=>{ avisarErroInesperado('promise', e.reason); });
+
 // ---------- ICONS ----------
 const ICON = {
   edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>',
@@ -1585,7 +1599,7 @@ function orderCardHTML(o){
       </div>
       ${aguardandoRetirada ? `<div class="aguardando-retirada-badge">📦 Pago — mercadoria aguardando retirada</div>` : ''}
       <div class="order-items-checklist">
-        ${o.itens.map((it,idx)=>({it,idx})).sort((a,b)=>(b.it.separado?1:0)-(a.it.separado?1:0)).map(({it,idx})=>`
+        ${o.itens.map((it,idx)=>`
           <label class="check-row ${it.separado?'checked-row':''}">
             <input type="checkbox" data-toggle-item-order="${o.id}" data-toggle-item-idx="${idx}" ${it.separado?'checked':''}>
             <span>${orderItemPrecoPendente(it) ? '⚠️ ' : ''}${it.qtd}${abbrevUnidade(it.unidade)} ${escapeHtml(it.produtoNome)}${orderItemPrecoPendente(it) ? ' — preço pendente' : ` — ${fmtMoney(it.precoUnit)} = ${fmtMoney(it.qtd*it.precoUnit)}`}</span>
