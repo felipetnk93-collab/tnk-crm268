@@ -589,6 +589,11 @@ function melhorMatchCliente(texto){
   });
   return melhor;
 }
+function labelProdutoDisambiguado(p){
+  const norm = normalizeSearch(p.nome);
+  const duplicados = products.filter(pp=>normalizeSearch(pp.nome)===norm);
+  return duplicados.length>1 ? `${p.nome} (${p.unidade})` : p.nome;
+}
 function melhorMatchProduto(texto){
   const norm = normalizeSearch(texto).trim();
   if(!norm) return null;
@@ -2598,7 +2603,7 @@ function orderItemRowHTML(it, idx){
           ${UNIDADES.map(u=>`<option value="${u}" ${unidadeFiltro===u?'selected':''}>${abbrevUnidade(u)}</option>`).join('')}
         </select>
         <button type="button" class="product-select-btn ${!p?'placeholder':''}" data-item-produto-btn="${idx}">
-          ${p ? escapeHtml(p.nome) : 'Produto...'}
+          ${p ? escapeHtml(labelProdutoDisambiguado(p)) : 'Produto...'}
         </button>
         <button type="button" class="remove-item" data-remove-item="${idx}">${ICON.trash}</button>
       </div>
@@ -2694,7 +2699,7 @@ function compraItemRowHTML(it, idx){
           ${UNIDADES.map(u=>`<option value="${u}" ${unidadeFiltro===u?'selected':''}>${abbrevUnidade(u)}</option>`).join('')}
         </select>
         <button type="button" class="product-select-btn ${!p?'placeholder':''}" data-compra-item-produto-btn="${idx}">
-          ${p ? escapeHtml(p.nome) : 'Produto...'}
+          ${p ? escapeHtml(labelProdutoDisambiguado(p)) : 'Produto...'}
         </button>
         <button type="button" class="remove-item" data-remove-compra-item="${idx}">${ICON.trash}</button>
       </div>
@@ -3343,11 +3348,11 @@ function bindPedidoForm(existing){
       btn.addEventListener('click', ()=>{
         const idx = btn.dataset.itemProdutoBtn;
         const unidadeFiltro = orderDraftItems[idx].unidadeFiltro || '';
-        openProductDropdown(btn, orderDraftItems[idx].produtoId, (p)=>p.nome, (selectedId)=>{
+        openProductDropdown(btn, orderDraftItems[idx].produtoId, (p)=>labelProdutoDisambiguado(p), (selectedId)=>{
           orderDraftItems[idx].produtoId = selectedId;
           const p = products.find(pp=>pp.id===selectedId);
           orderDraftItems[idx].precoUnit = p ? p.preco : '';
-          btn.textContent = p ? p.nome : 'Produto...';
+          btn.textContent = p ? labelProdutoDisambiguado(p) : 'Produto...';
           btn.classList.toggle('placeholder', !p);
           const precoInput = document.querySelector(`[data-item-preco="${idx}"]`);
           if(precoInput) precoInput.value = p ? p.preco : '';
@@ -3471,11 +3476,11 @@ function bindCompraForm(existing){
       btn.addEventListener('click', ()=>{
         const idx = btn.dataset.compraItemProdutoBtn;
         const unidadeFiltro = compraDraftItems[idx].unidadeFiltro || '';
-        openProductDropdown(btn, compraDraftItems[idx].produtoId, (p)=>p.nome, (selectedId)=>{
+        openProductDropdown(btn, compraDraftItems[idx].produtoId, (p)=>labelProdutoDisambiguado(p), (selectedId)=>{
           compraDraftItems[idx].produtoId = selectedId;
           const p = products.find(pp=>pp.id===selectedId);
           compraDraftItems[idx].custoUnit = p ? (p.custo||0) : '';
-          btn.textContent = p ? p.nome : 'Produto...';
+          btn.textContent = p ? labelProdutoDisambiguado(p) : 'Produto...';
           btn.classList.toggle('placeholder', !p);
           const custoInput = document.querySelector(`[data-compra-item-custo="${idx}"]`);
           if(custoInput){
