@@ -371,6 +371,17 @@
   .fechamento-linha.destaque{font-weight:700;font-size:16px;color:var(--tomato-dark);}
   .fechamento-linha.atencao span:last-child{color:var(--tomato-dark);font-weight:700;}
   .fechamento-sep{border-top:1px dashed var(--line);margin:8px 0;}
+  .revisao-bloco{background:var(--paper-2);border-radius:10px;padding:10px;margin-bottom:10px;}
+  .revisao-bloco.excluido{opacity:0.5;}
+  .revisao-bloco-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .revisao-bloco-header select{flex:1;min-width:0;}
+  .revisao-incluir{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--wood-light);white-space:nowrap;}
+  .revisao-item{margin-bottom:6px;}
+  .revisao-item.needs-review-item{background:#FDF1D6;border-radius:6px;padding:6px;}
+  .revisao-item-aviso{font-size:10.5px;color:#8A6416;margin-bottom:4px;}
+  .revisao-item-linha{display:flex;gap:4px;align-items:center;}
+  .revisao-item-linha select{flex:2;min-width:0;font-size:12px;}
+  .revisao-item-linha input{flex:1;min-width:0;font-size:12px;}
   .atalhos-produtos{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
   .atalhos-label{font-size:11px;color:var(--wood-light);margin-right:2px;}
   .atalho-produto-btn{
@@ -606,6 +617,62 @@ function melhorMatchProduto(texto){
     }
   });
   return melhor;
+}
+function encontrarProdutoPorCodigo(codigo){
+  const norm = normalizeSearch(codigo).trim();
+  if(!norm) return null;
+  for(const p of products){
+    const apelidos = (p.apelidos||[]).map(a=>normalizeSearch(a));
+    if(apelidos.includes(norm)) return p;
+  }
+  return melhorMatchProduto(codigo);
+}
+function parseLinhaCaderno(linha){
+  const norm = normalizeSearch(linha).trim();
+  let melhorCliente = null, melhorLen = 0;
+  clients.forEach(c=>{
+    const nomeNorm = normalizeSearch(c.nome);
+    if(nomeNorm && norm.startsWith(nomeNorm) && nomeNorm.length > melhorLen){
+      melhorCliente = c; melhorLen = nomeNorm.length;
+    }
+  });
+  let restante = linha.trim();
+  let clienteId = null, clienteNome = null, clienteNomeBusca = null;
+  if(melhorCliente){
+    clienteId = melhorCliente.id; clienteNome = melhorCliente.nome;
+    restante = linha.trim().slice(melhorLen).replace(/^[\s,;.]+/, '');
+  }else{
+    const m = linha.trim().match(/^(\S+)\s*(.*)$/);
+    if(m){ clienteNomeBusca = m[1]; restante = m[2]; }
+  }
+
+  const regex = /(\d+(?:[.,]\d+)?)/g;
+  let match;
+  const posicoes = [];
+  while((match = regex.exec(restante)) !== null){
+    posicoes.push({ valor: parseFloat(match[1].replace(',','.')), index: match.index, fim: match.index + match[0].length });
+  }
+  const itens = [];
+  for(let i=0;i<posicoes.length;i++){
+    const inicio = posicoes[i].fim;
+    const fim = (i+1<posicoes.length) ? posicoes[i+1].index : restante.length;
+    const codigo = restante.slice(inicio, fim).trim();
+    if(!codigo) continue;
+    const produto = encontrarProdutoPorCodigo(codigo);
+    itens.push({
+      produtoId: produto ? produto.id : '',
+      produtoNome: produto ? produto.nome : '',
+      codigoOriginal: codigo,
+      unidade: produto ? produto.unidade : '',
+      qtd: posicoes[i].valor,
+      precoUnit: produto ? produto.preco : ''
+    });
+  }
+  return { clienteId, clienteNome, clienteNomeBusca, itens, linhaOriginal: linha };
+}
+function parseCadernoTexto(textoCompleto){
+  const linhas = textoCompleto.split('\n').map(l=>l.trim()).filter(Boolean);
+  return linhas.map(parseLinhaCaderno).filter(r=>r.itens.length>0 || r.clienteId || r.clienteNomeBusca);
 }
 function parseItemTexto(texto){
   const norm = normalizeSearch(texto);
@@ -946,6 +1013,45 @@ function hideAuthGate(){
   const app = document.querySelector('.app');
   if(gate) gate.style.display = 'none';
   if(app) app.style.display = '';
+}
+
+// ---------- LEITURA DE FOTO DO CADERNO (Google Cloud Vision) ----------
+let cloudVisionApiKey = null;
+async function loadCloudVisionKey(){
+  try{ cloudVisionApiKey = await safeGet('ceasa_vision_api_key'); }catch(e){ cloudVisionApiKey = null; }
+}
+async function saveCloudVisionKey(key){
+  cloudVisionApiKey = key || null;
+  await safeSet('ceasa_vision_api_key', cloudVisionApiKey);
+}
+function fileParaBase64(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=> resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+async function extrairTextoDaFoto(base64Image){
+  if(!cloudVisionApiKey) throw new Error('CHAVE_NAO_CONFIGURADA');
+  const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${cloudVisionApiKey}`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      requests: [{
+        image: { content: base64Image },
+        features: [{ type: 'DOCUMENT_TEXT_DETECTION' }]
+      }]
+    })
+  });
+  const data = await res.json();
+  const respostaErro = data.responses && data.responses[0] && data.responses[0].error;
+  if(!res.ok || respostaErro){
+    const msg = (data.error && data.error.message) || (respostaErro && respostaErro.message) || 'Falha ao ler a imagem';
+    throw new Error(msg);
+  }
+  const bloco = data.responses && data.responses[0];
+  return (bloco && bloco.fullTextAnnotation) ? bloco.fullTextAnnotation.text : '';
 }
 
 let syncUrl = null;
@@ -1547,6 +1653,7 @@ function renderPedidos(){
       <button class="btn primary" id="add-pedido-btn">${ICON.plus} Novo</button>
       <button class="btn ghost" id="pedido-voz-btn">🎤 Pedido por voz</button>
       <button class="btn ghost" id="fechamento-dia-btn">${ICON.money} Fechamento do dia</button>
+      <button class="btn ghost" id="foto-caderno-btn">📷 Ler caderno</button>
       ${filtered.length>0 ? `<button class="btn ghost" id="print-list-btn">${ICON.print} Imprimir</button><button class="btn ghost" id="print-list-pick-btn">${ICON.checklist} Separar</button>` : ''}
     </div>
     <div class="date-filter-row">
@@ -2501,7 +2608,7 @@ function fornecedorFormHTML(f){
 
 function produtoFormHTML(p){
   const isEdit = !!p;
-  p = p || {nome:'',unidade:'kg',preco:'',custo:''};
+  p = p || {nome:'',unidade:'kg',preco:'',custo:'',apelidos:[]};
   return `
     <h3>${isEdit?'Editar produto':'Novo produto'}</h3>
     <form id="produto-form">
@@ -2513,6 +2620,7 @@ function produtoFormHTML(p){
         <div class="field"><label>Preço de venda (R$)</label><input required type="number" step="0.01" min="0" id="f-preco" value="${p.preco}" placeholder="0,00"></div>
       </div>
       <div class="field"><label>Preço de custo / compra (R$)</label><input type="number" step="0.01" min="0" id="f-custo" value="${p.custo||''}" placeholder="0,00 (opcional)"></div>
+      <div class="field"><label>Apelidos / abreviações (opcional)</label><input id="f-apelidos" value="${escapeAttr((p.apelidos||[]).join(', '))}" placeholder="Ex: jp, pep jap"><div style="font-size:11px;color:var(--wood-light);margin-top:3px;">Separe por vírgula. Usados para reconhecer o produto ao ler fotos do caderno.</div></div>
       <div class="modal-actions">
         <button type="button" class="btn ghost" id="cancel-modal">Cancelar</button>
         <button type="submit" class="btn primary">${isEdit?'Salvar':'Adicionar'}</button>
@@ -2861,6 +2969,8 @@ function attachContentEvents(){
   if(pedidoVozBtn) pedidoVozBtn.addEventListener('click', ()=>{ openModal(pedidoVozModalHTML()); bindPedidoVozModal(); });
   const fechamentoDiaBtn = document.getElementById('fechamento-dia-btn');
   if(fechamentoDiaBtn) fechamentoDiaBtn.addEventListener('click', ()=>{ openModal(fechamentoDiaModalHTML()); bindFechamentoDiaModal(); });
+  const fotoCadernoBtn = document.getElementById('foto-caderno-btn');
+  if(fotoCadernoBtn) fotoCadernoBtn.addEventListener('click', ()=>{ openModal(fotoCadernoModalHTML()); bindFotoCadernoModal(); });
   document.querySelectorAll('[data-edit-pedido]').forEach(b=>b.addEventListener('click', ()=>{
     const o = orders.find(x=>x.id===b.dataset.editPedido);
     openModal(pedidoFormHTML(o)); bindPedidoForm(o);
@@ -3141,6 +3251,7 @@ function bindProdutoForm(existing){
       unidade: document.getElementById('f-unidade').value,
       preco: parseFloat(document.getElementById('f-preco').value) || 0,
       custo: parseFloat(document.getElementById('f-custo').value) || 0,
+      apelidos: document.getElementById('f-apelidos').value.split(',').map(s=>s.trim()).filter(Boolean),
     };
     if(!data.nome) return;
     if(existing){
@@ -3254,6 +3365,229 @@ function bindFechamentoDiaModal(){
   });
   document.getElementById('imprimir-fechamento-btn').addEventListener('click', ()=>{
     imprimirFechamento(fechamentoData);
+  });
+}
+
+// ---------- FOTO DO CADERNO: modais ----------
+function configVisionModalHTML(){
+  return `
+    <h3>Configurar leitura de foto</h3>
+    <p style="font-size:12.5px;color:var(--wood-light);line-height:1.5;margin-bottom:10px;">
+      Cole aqui a chave de API do Google Cloud Vision (Cloud Console → Credenciais).
+    </p>
+    <div class="field">
+      <label>Chave de API</label>
+      <div class="password-field-wrap">
+        <input type="password" id="vision-key-input" value="${escapeAttr(cloudVisionApiKey||'')}" autocomplete="off">
+        <button type="button" class="icon-btn small" id="toggle-vision-key-visibility">${ICON.eye}</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="cancel-modal">Cancelar</button>
+      <button type="button" class="btn primary" id="save-vision-key-btn">Salvar</button>
+    </div>
+  `;
+}
+function bindConfigVisionModal(){
+  document.getElementById('cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('toggle-vision-key-visibility').addEventListener('click', ()=>{
+    const input = document.getElementById('vision-key-input');
+    input.type = input.type==='password' ? 'text' : 'password';
+  });
+  document.getElementById('save-vision-key-btn').addEventListener('click', async ()=>{
+    const val = document.getElementById('vision-key-input').value.trim();
+    await saveCloudVisionKey(val);
+    showToast(val ? 'Chave salva.' : 'Chave removida.');
+    closeModal();
+  });
+}
+function fotoCadernoModalHTML(){
+  return `
+    <h3>Ler pedidos do caderno</h3>
+    <p style="font-size:12.5px;color:var(--wood-light);line-height:1.5;margin-bottom:10px;">
+      Tire ou escolha uma foto da página do caderno. Cada linha deve começar com o nome do cliente.
+    </p>
+    <div class="field">
+      <input type="file" id="foto-caderno-input" accept="image/*" capture="environment">
+    </div>
+    <div id="foto-caderno-preview"></div>
+    <div id="foto-caderno-status" style="font-size:12px;color:var(--wood-light);text-align:center;margin:8px 0;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="cancel-modal">Cancelar</button>
+      <button type="button" class="btn primary" id="processar-foto-btn">Processar foto</button>
+    </div>
+    <button type="button" class="link-btn" id="config-vision-btn" style="margin-top:12px;">Configurar chave da Cloud Vision</button>
+  `;
+}
+function bindFotoCadernoModal(){
+  document.getElementById('cancel-modal').addEventListener('click', closeModal);
+  let selectedFile = null;
+  document.getElementById('foto-caderno-input').addEventListener('change', (e)=>{
+    selectedFile = e.target.files[0];
+    const preview = document.getElementById('foto-caderno-preview');
+    if(selectedFile){
+      const url = URL.createObjectURL(selectedFile);
+      preview.innerHTML = `<img src="${url}" style="max-width:100%;border-radius:8px;margin-top:8px;">`;
+    }
+  });
+  document.getElementById('processar-foto-btn').addEventListener('click', async ()=>{
+    if(!selectedFile){ showToast('Escolha ou tire uma foto primeiro.'); return; }
+    if(!cloudVisionApiKey){
+      showToast('Configure a chave da Cloud Vision antes (link abaixo do botão).', 5000);
+      return;
+    }
+    const statusEl = document.getElementById('foto-caderno-status');
+    statusEl.textContent = 'Lendo a foto, aguarde...';
+    try{
+      const base64 = await fileParaBase64(selectedFile);
+      const texto = await extrairTextoDaFoto(base64);
+      if(!texto.trim()){
+        statusEl.textContent = '';
+        showToast('Não consegui ler nenhum texto nessa foto. Tente com mais luz/foco.', 5000);
+        return;
+      }
+      const pedidosDetectados = parseCadernoTexto(texto);
+      if(pedidosDetectados.length===0){
+        statusEl.textContent = '';
+        showToast('Nenhum pedido reconhecido nessa foto.', 5000);
+        return;
+      }
+      closeModal();
+      abrirRevisaoPedidosDetectados(pedidosDetectados, texto);
+    }catch(e){
+      statusEl.textContent = '';
+      console.error(e);
+      showToast('Falha ao processar a foto: ' + (e.message||''), 6000);
+    }
+  });
+  document.getElementById('config-vision-btn').addEventListener('click', ()=>{
+    openModal(configVisionModalHTML());
+    bindConfigVisionModal();
+  });
+}
+
+// ---------- REVISÃO DE PEDIDOS DETECTADOS NA FOTO ----------
+let pedidosDetectadosState = [];
+function abrirRevisaoPedidosDetectados(pedidosDetectados, textoOriginal){
+  pedidosDetectadosState = pedidosDetectados.map(p=>({...p, incluir:true}));
+  openModal(revisaoPedidosModalHTML(textoOriginal));
+  bindRevisaoPedidosModal();
+}
+function revisaoPedidosModalHTML(textoOriginal){
+  return `
+    <h3>Pedidos detectados (${pedidosDetectadosState.length})</h3>
+    <p style="font-size:12px;color:var(--wood-light);margin-bottom:10px;">Confira cada um antes de confirmar — nada é salvo ainda.</p>
+    <div id="revisao-lista">${pedidosDetectadosState.map((p,idx)=>revisaoBlocoHTML(p,idx)).join('')}</div>
+    <details style="margin-top:10px;">
+      <summary style="font-size:11px;color:var(--wood-light);cursor:pointer;">Ver texto lido da foto</summary>
+      <pre style="font-size:11px;white-space:pre-wrap;color:var(--wood-light);background:var(--paper-2);padding:8px;border-radius:6px;margin-top:6px;">${escapeHtml(textoOriginal)}</pre>
+    </details>
+    <div class="modal-actions" style="margin-top:14px;">
+      <button type="button" class="btn ghost" id="cancel-modal" style="flex:1;">Cancelar tudo</button>
+      <button type="button" class="btn primary" id="confirmar-pedidos-detectados-btn">Confirmar e criar pedidos</button>
+    </div>
+  `;
+}
+function revisaoBlocoHTML(p, idx){
+  const semCliente = !p.clienteId;
+  return `
+    <div class="revisao-bloco ${!p.incluir?'excluido':''}" data-bloco-idx="${idx}">
+      <div class="revisao-bloco-header">
+        <label class="revisao-incluir"><input type="checkbox" data-revisao-incluir="${idx}" ${p.incluir?'checked':''}> Incluir</label>
+        <select data-revisao-cliente="${idx}" class="${semCliente?'needs-review':''}">
+          <option value="">${p.clienteNomeBusca ? 'Não reconhecido: "'+escapeHtml(p.clienteNomeBusca)+'"' : 'Selecione o cliente...'}</option>
+          ${sortByName(clients).map(c=>`<option value="${c.id}" ${p.clienteId===c.id?'selected':''}>${escapeHtml(c.nome)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="revisao-itens">
+        ${p.itens.map((it,itIdx)=>revisaoItemHTML(it, idx, itIdx)).join('')}
+      </div>
+      <button type="button" class="link-btn" data-revisao-add-item="${idx}" style="font-size:11px;">+ adicionar item</button>
+    </div>
+  `;
+}
+function revisaoItemHTML(it, blocoIdx, itIdx){
+  const naoReconhecido = !it.produtoId;
+  return `
+    <div class="revisao-item ${naoReconhecido?'needs-review-item':''}">
+      ${naoReconhecido ? `<div class="revisao-item-aviso">⚠️ código lido: "${escapeHtml(it.codigoOriginal||'')}"</div>` : ''}
+      <div class="revisao-item-linha">
+        <select data-revisao-produto="${blocoIdx}-${itIdx}">
+          <option value="">Selecione o produto...</option>
+          ${sortByName(products).map(pp=>`<option value="${pp.id}" ${it.produtoId===pp.id?'selected':''}>${escapeHtml(labelProdutoDisambiguado(pp))}</option>`).join('')}
+        </select>
+        <input type="number" step="0.01" min="0.01" data-revisao-qtd="${blocoIdx}-${itIdx}" value="${it.qtd}" placeholder="qtd" onfocus="this.select()">
+        <input type="number" step="0.01" min="0" data-revisao-preco="${blocoIdx}-${itIdx}" value="${it.precoUnit}" placeholder="preço" onfocus="this.select()">
+        <button type="button" class="icon-btn small" data-revisao-remove-item="${blocoIdx}-${itIdx}">${ICON.trash}</button>
+      </div>
+    </div>
+  `;
+}
+function rerenderRevisaoLista(){
+  document.getElementById('revisao-lista').innerHTML = pedidosDetectadosState.map((p,idx)=>revisaoBlocoHTML(p,idx)).join('');
+  bindRevisaoListaEventos();
+}
+function bindRevisaoListaEventos(){
+  document.querySelectorAll('[data-revisao-incluir]').forEach(cb=>cb.addEventListener('change', ()=>{
+    pedidosDetectadosState[cb.dataset.revisaoIncluir].incluir = cb.checked;
+    rerenderRevisaoLista();
+  }));
+  document.querySelectorAll('[data-revisao-cliente]').forEach(sel=>sel.addEventListener('change', ()=>{
+    const idx = sel.dataset.revisaoCliente;
+    pedidosDetectadosState[idx].clienteId = sel.value || null;
+  }));
+  document.querySelectorAll('[data-revisao-produto]').forEach(sel=>sel.addEventListener('change', ()=>{
+    const [blocoIdx, itIdx] = sel.dataset.revisaoProduto.split('-').map(Number);
+    const produto = products.find(p=>p.id===sel.value);
+    const item = pedidosDetectadosState[blocoIdx].itens[itIdx];
+    item.produtoId = sel.value || '';
+    if(produto && (!item.precoUnit && item.precoUnit!==0)) item.precoUnit = produto.preco;
+  }));
+  document.querySelectorAll('[data-revisao-qtd]').forEach(inp=>inp.addEventListener('input', ()=>{
+    const [blocoIdx, itIdx] = inp.dataset.revisaoQtd.split('-').map(Number);
+    pedidosDetectadosState[blocoIdx].itens[itIdx].qtd = parseFloat(inp.value)||0;
+  }));
+  document.querySelectorAll('[data-revisao-preco]').forEach(inp=>inp.addEventListener('input', ()=>{
+    const [blocoIdx, itIdx] = inp.dataset.revisaoPreco.split('-').map(Number);
+    pedidosDetectadosState[blocoIdx].itens[itIdx].precoUnit = parseFloat(inp.value)||0;
+  }));
+  document.querySelectorAll('[data-revisao-remove-item]').forEach(btn=>btn.addEventListener('click', ()=>{
+    const [blocoIdx, itIdx] = btn.dataset.revisaoRemoveItem.split('-').map(Number);
+    pedidosDetectadosState[blocoIdx].itens.splice(itIdx,1);
+    rerenderRevisaoLista();
+  }));
+  document.querySelectorAll('[data-revisao-add-item]').forEach(btn=>btn.addEventListener('click', ()=>{
+    const idx = btn.dataset.revisaoAddItem;
+    pedidosDetectadosState[idx].itens.push({produtoId:'', produtoNome:'', codigoOriginal:'', unidade:'', qtd:1, precoUnit:''});
+    rerenderRevisaoLista();
+  }));
+}
+function bindRevisaoPedidosModal(){
+  document.getElementById('cancel-modal').addEventListener('click', closeModal);
+  bindRevisaoListaEventos();
+  document.getElementById('confirmar-pedidos-detectados-btn').addEventListener('click', async ()=>{
+    let criados = 0, ignorados = 0;
+    pedidosDetectadosState.forEach(p=>{
+      if(!p.incluir || !p.clienteId) { if(p.incluir) ignorados++; return; }
+      const itensValidos = p.itens.filter(it=>it.produtoId && Number(it.qtd)>0).map(it=>{
+        const produto = products.find(pp=>pp.id===it.produtoId);
+        return {
+          produtoId: it.produtoId, produtoNome: produto.nome, unidade: produto.unidade,
+          qtd: Number(it.qtd), precoUnit: Number(it.precoUnit)||produto.preco, separado:false
+        };
+      });
+      if(itensValidos.length===0){ ignorados++; return; }
+      orders.push({
+        id: uid(), clienteId: p.clienteId, data: todayISO(), entregue:false,
+        statusPagamento:'pendente', formaPagamento:'', itens: itensValidos, valorPago:0, criadoEm: Date.now()
+      });
+      criados++;
+    });
+    if(criados>0) await saveOrders();
+    pedidoFilter='todos'; pedidoDateFrom=''; pedidoDateTo=''; pedidoSearch=''; pedidoClienteFilterId=null;
+    closeModal();
+    showToast(`${criados} pedido(s) criado(s)${ignorados>0 ? `, ${ignorados} ignorado(s) por faltar cliente/item` : ''}.`, 5000);
+    render();
   });
 }
 
@@ -3833,6 +4167,7 @@ async function startAppAfterAuth(){
   tryAutoReconnectPrinter();
 
   await loadSyncConfig();
+  await loadCloudVisionKey();
   if(syncUrl){
     await pullFromCloud(false);
   }
