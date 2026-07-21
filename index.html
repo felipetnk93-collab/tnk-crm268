@@ -383,6 +383,9 @@
   .revisao-item-linha{display:flex;gap:4px;align-items:center;}
   .revisao-item-linha select{flex:2;min-width:0;font-size:12px;}
   .revisao-item-linha input{flex:1;min-width:0;font-size:12px;}
+  .coluna-config-item{display:flex;gap:6px;align-items:center;margin-bottom:8px;}
+  .coluna-config-item input{flex:1;min-width:0;}
+  .coluna-config-item select{flex:1;min-width:0;}
   .atalhos-produtos{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
   .atalhos-label{font-size:11px;color:var(--wood-light);margin-right:2px;}
   .atalho-produto-btn{
@@ -638,6 +641,32 @@ function encontrarProdutoPorCodigo(codigo){
   }
   return melhorMatchProduto(codigo);
 }
+function parseItensRepetidos(texto){
+  const regex = /(\d+(?:[.,]\d+)?)/g;
+  let match;
+  const posicoes = [];
+  while((match = regex.exec(texto)) !== null){
+    posicoes.push({ valor: parseFloat(match[1].replace(',','.')), index: match.index, fim: match.index + match[0].length });
+  }
+  const itens = [];
+  for(let i=0;i<posicoes.length;i++){
+    const inicio = posicoes[i].fim;
+    const fim = (i+1<posicoes.length) ? posicoes[i+1].index : texto.length;
+    const codigoBruto = texto.slice(inicio, fim).trim();
+    if(!codigoBruto) continue;
+    const { unidadeExplicita, codigoLimpo } = separarUnidadeDoCodigo(codigoBruto);
+    const produto = encontrarProdutoPorCodigo(codigoLimpo);
+    itens.push({
+      produtoId: produto ? produto.id : '',
+      produtoNome: produto ? produto.nome : '',
+      codigoOriginal: codigoBruto,
+      unidade: unidadeExplicita || (produto ? produto.unidade : ''),
+      qtd: posicoes[i].valor,
+      precoUnit: produto ? produto.preco : ''
+    });
+  }
+  return itens;
+}
 function parseLinhaCaderno(linha){
   const norm = normalizeSearch(linha).trim();
   let melhorCliente = null, melhorLen = 0;
@@ -664,34 +693,179 @@ function parseLinhaCaderno(linha){
     restante = restante.slice(0, marcaPagoMatch.index).trim();
   }
 
-  const regex = /(\d+(?:[.,]\d+)?)/g;
-  let match;
-  const posicoes = [];
-  while((match = regex.exec(restante)) !== null){
-    posicoes.push({ valor: parseFloat(match[1].replace(',','.')), index: match.index, fim: match.index + match[0].length });
-  }
-  const itens = [];
-  for(let i=0;i<posicoes.length;i++){
-    const inicio = posicoes[i].fim;
-    const fim = (i+1<posicoes.length) ? posicoes[i+1].index : restante.length;
-    const codigoBruto = restante.slice(inicio, fim).trim();
-    if(!codigoBruto) continue;
-    const { unidadeExplicita, codigoLimpo } = separarUnidadeDoCodigo(codigoBruto);
-    const produto = encontrarProdutoPorCodigo(codigoLimpo);
-    itens.push({
-      produtoId: produto ? produto.id : '',
-      produtoNome: produto ? produto.nome : '',
-      codigoOriginal: codigoBruto,
-      unidade: unidadeExplicita || (produto ? produto.unidade : ''),
-      qtd: posicoes[i].valor,
-      precoUnit: produto ? produto.preco : ''
-    });
-  }
+  const itens = parseItensRepetidos(restante);
   return { clienteId, clienteNome, clienteNomeBusca, itens, pago, linhaOriginal: linha };
 }
 function parseCadernoTexto(textoCompleto){
   const linhas = textoCompleto.split('\n').map(l=>l.trim()).filter(Boolean);
   return linhas.map(parseLinhaCaderno).filter(r=>r.itens.length>0 || r.clienteId || r.clienteNomeBusca);
+}
+
+// ---------- LEITURA DE CADERNO EM FORMATO TABELA (colunas fixas) ----------
+let tabelaColunasConfig = [];
+async function loadTabelaColunasConfig(){
+  try{ tabelaColunasConfig = (await safeGet('ceasa_tabela_colunas')) || []; }catch(e){ tabelaColunasConfig = []; }
+}
+async function saveTabelaColunasConfig(){
+  await safeSet('ceasa_tabela_colunas', tabelaColunasConfig);
+}
+function agruparEmLinhas(palavras){
+  if(palavras.length===0) return [];
+  const alturaMedia = palavras.reduce((s,p)=>s+p.altura,0)/palavras.length || 20;
+  const tolerancia = alturaMedia * 0.7;
+  const ordenadas = [...palavras].sort((a,b)=>a.yCentro-b.yCentro);
+  const linhas = [];
+  ordenadas.forEach(p=>{
+    let linha = linhas.find(l=>Math.abs(l.yMedio - p.yCentro) < tolerancia);
+    if(!linha){
+      linha = { yMedio: p.yCentro, palavras: [] };
+      linhas.push(linha);
+    }
+    linha.palavras.push(p);
+    linha.yMedio = linha.palavras.reduce((s,pp)=>s+pp.yCentro,0)/linha.palavras.length;
+  });
+  linhas.forEach(l=>l.palavras.sort((a,b)=>a.xCentro-b.xCentro));
+  linhas.sort((a,b)=>a.yMedio-b.yMedio);
+  return linhas;
+}
+function detectarLinhaCabecalhoTabela(linhas){
+  for(const linha of linhas){
+    const temComprador = linha.palavras.some(p=>normalizeSearch(p.texto).includes('comprador'));
+    if(temComprador) return linha;
+  }
+  return null;
+}
+function detectarColunasTabela(linhaCabecalho){
+  const colunas = [];
+  const wComprador = linhaCabecalho.palavras.find(p=>normalizeSearch(p.texto).includes('comprador'));
+  if(wComprador) colunas.push({ tipo:'comprador', xCentro: wComprador.xCentro });
+
+  tabelaColunasConfig.forEach(cfg=>{
+    const normCabecalho = normalizeSearch(cfg.cabecalho);
+    const w = linhaCabecalho.palavras.find(p=>{
+      const t = normalizeSearch(p.texto);
+      return t.includes(normCabecalho) || normCabecalho.includes(t);
+    });
+    if(w) colunas.push({ tipo:'produto_fixo', xCentro: w.xCentro, produtoId: cfg.produtoId, nome: cfg.cabecalho });
+  });
+
+  const wTotal = linhaCabecalho.palavras.find(p=>normalizeSearch(p.texto).includes('total'));
+  if(wTotal) colunas.push({ tipo:'total', xCentro: wTotal.xCentro });
+
+  colunas.sort((a,b)=>a.xCentro-b.xCentro);
+  return colunas;
+}
+function construirZonasTabela(colunas, larguraPagina){
+  const centrosConhecidos = colunas.filter(c=>c.tipo!=='total').map(c=>c.xCentro).sort((a,b)=>a-b);
+  const larguras = [];
+  for(let i=1;i<centrosConhecidos.length;i++) larguras.push(centrosConhecidos[i]-centrosConhecidos[i-1]);
+  const larguraTipica = larguras.length ? larguras.reduce((s,v)=>s+v,0)/larguras.length : 150;
+
+  const zonas = [];
+  colunas.forEach((col,idx)=>{
+    const atual = col.xCentro;
+    const min = idx>0 ? (colunas[idx-1].xCentro+atual)/2 : 0;
+    let max;
+    if(idx<colunas.length-1){
+      max = (atual+colunas[idx+1].xCentro)/2;
+      if(colunas[idx+1].tipo==='total') max = Math.min(max, atual + larguraTipica/2);
+    }else{
+      max = larguraPagina;
+    }
+    zonas.push({ col, min, max, palavras: [] });
+  });
+
+  const idxTotalZona = zonas.findIndex(z=>z.col.tipo==='total');
+  if(idxTotalZona>0){
+    const zonaAnterior = zonas[idxTotalZona-1];
+    const zonaTotal = zonas[idxTotalZona];
+    if(zonaTotal.min > zonaAnterior.max + 1){
+      zonas.splice(idxTotalZona, 0, { col:{tipo:'livre'}, min: zonaAnterior.max, max: zonaTotal.min, palavras: [] });
+    }
+  }
+  return zonas;
+}
+function linhaEhCabecalho(linha, colunas){
+  const rotulos = ['comprador','total','qtde','rs','r$','data'];
+  colunas.forEach(c=>{ if(c.nome) rotulos.push(normalizeSearch(c.nome)); });
+  tabelaColunasConfig.forEach(c=>{ if(c.cabecalho) rotulos.push(normalizeSearch(c.cabecalho)); });
+  const palavrasRelevantes = linha.palavras.filter(p=>normalizeSearch(p.texto).replace(/[^a-z0-9]/g,'').length>0);
+  if(palavrasRelevantes.length===0) return true;
+  return palavrasRelevantes.every(p=>{
+    const norm = normalizeSearch(p.texto).replace(/[^a-z0-9]/g,'');
+    return rotulos.some(r=>{
+      const rNorm = r.replace(/[^a-z0-9]/g,'');
+      return rNorm && (norm===rNorm || norm.includes(rNorm) || rNorm.includes(norm));
+    });
+  });
+}
+function parseTabelaCaderno(palavras){
+  if(tabelaColunasConfig.length===0){
+    return { erro: 'Configure antes as colunas fixas da tabela (produto de cada coluna).', pedidos: [] };
+  }
+  const linhas = agruparEmLinhas(palavras);
+  const linhaCabecalho = detectarLinhaCabecalhoTabela(linhas);
+  if(!linhaCabecalho){
+    return { erro: 'Não encontrei a palavra "COMPRADOR" na foto — confira se a tabela ficou legível no enquadramento.', pedidos: [] };
+  }
+  const colunas = detectarColunasTabela(linhaCabecalho);
+  if(colunas.length<2){
+    return { erro: 'Não consegui reconhecer os cabeçalhos das colunas configuradas nessa foto.', pedidos: [] };
+  }
+  const larguraPagina = Math.max(...palavras.map(p=>p.x2)) + 200;
+  const idxCabecalho = linhas.indexOf(linhaCabecalho);
+  let inicioReal = idxCabecalho+1;
+  while(inicioReal<linhas.length && linhaEhCabecalho(linhas[inicioReal], colunas)){
+    inicioReal++;
+  }
+  const linhasDados = linhas.slice(inicioReal);
+  const zonasBase = construirZonasTabela(colunas, larguraPagina);
+
+  const pedidos = [];
+  linhasDados.forEach(linha=>{
+    if(linha.palavras.length===0) return;
+    const zonas = zonasBase.map(z=>({ col:z.col, min:z.min, max:z.max, palavras: [] }));
+    linha.palavras.forEach(p=>{
+      const zona = zonas.find(z=>p.xCentro>=z.min && p.xCentro<z.max) || zonas[zonas.length-1];
+      zona.palavras.push(p);
+    });
+
+    const zonaComprador = zonas.find(z=>z.col.tipo==='comprador');
+    const textoComprador = zonaComprador ? zonaComprador.palavras.map(p=>p.texto).join(' ').trim() : '';
+    if(!textoComprador) return;
+
+    const clienteMatch = melhorMatchCliente(textoComprador);
+    const itens = [];
+
+    zonas.forEach(zona=>{
+      if(zona.col.tipo==='produto_fixo' && zona.palavras.length>0){
+        const textoZona = zona.palavras.map(p=>p.texto).join(' ');
+        const numMatch = textoZona.match(/\d+(?:[.,]\d+)?/);
+        if(numMatch){
+          const produto = products.find(p=>p.id===zona.col.produtoId);
+          if(produto){
+            itens.push({
+              produtoId: produto.id, produtoNome: produto.nome, codigoOriginal: zona.col.nome,
+              unidade: produto.unidade, qtd: parseFloat(numMatch[0].replace(',','.')), precoUnit: produto.preco
+            });
+          }
+        }
+      }
+      if(zona.col.tipo==='livre' && zona.palavras.length>0){
+        const textoLivre = zona.palavras.map(p=>p.texto).join(' ');
+        if(textoLivre.trim()) itens.push(...parseItensRepetidos(textoLivre));
+      }
+    });
+
+    pedidos.push({
+      clienteId: clienteMatch ? clienteMatch.id : null,
+      clienteNome: clienteMatch ? clienteMatch.nome : null,
+      clienteNomeBusca: clienteMatch ? null : textoComprador,
+      itens, pago:false
+    });
+  });
+
+  return { erro:null, pedidos: pedidos.filter(p=>p.itens.length>0 || p.clienteId || p.clienteNomeBusca) };
 }
 function parseItemTexto(texto){
   const norm = normalizeSearch(texto);
@@ -1051,7 +1225,7 @@ function fileParaBase64(file){
     reader.readAsDataURL(file);
   });
 }
-async function extrairTextoDaFoto(base64Image){
+async function chamarCloudVision(base64Image){
   if(!cloudVisionApiKey) throw new Error('CHAVE_NAO_CONFIGURADA');
   const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${cloudVisionApiKey}`, {
     method: 'POST',
@@ -1069,8 +1243,30 @@ async function extrairTextoDaFoto(base64Image){
     const msg = (data.error && data.error.message) || (respostaErro && respostaErro.message) || 'Falha ao ler a imagem';
     throw new Error(msg);
   }
-  const bloco = data.responses && data.responses[0];
-  return (bloco && bloco.fullTextAnnotation) ? bloco.fullTextAnnotation.text : '';
+  return (data.responses && data.responses[0]) || {};
+}
+async function extrairTextoDaFoto(base64Image){
+  const bloco = await chamarCloudVision(base64Image);
+  return bloco.fullTextAnnotation ? bloco.fullTextAnnotation.text : '';
+}
+function extrairPalavrasComPosicao(bloco){
+  const palavras = [];
+  if(!bloco.fullTextAnnotation || !bloco.fullTextAnnotation.pages) return palavras;
+  bloco.fullTextAnnotation.pages.forEach(pagina=>{
+    (pagina.blocks||[]).forEach(bl=>{
+      (bl.paragraphs||[]).forEach(par=>{
+        (par.words||[]).forEach(w=>{
+          const texto = (w.symbols||[]).map(s=>s.text).join('');
+          const verts = (w.boundingBox && w.boundingBox.vertices) || [];
+          if(!texto || verts.length===0) return;
+          const xs = verts.map(v=>v.x||0), ys = verts.map(v=>v.y||0);
+          const x1=Math.min(...xs), x2=Math.max(...xs), y1=Math.min(...ys), y2=Math.max(...ys);
+          palavras.push({ texto, xCentro:(x1+x2)/2, yCentro:(y1+y2)/2, x1, x2, y1, y2, altura:y2-y1 });
+        });
+      });
+    });
+  });
+  return palavras;
 }
 
 let syncUrl = null;
@@ -3424,8 +3620,9 @@ function fotoCadernoModalHTML(){
   return `
     <h3>Ler pedidos do caderno</h3>
     <p style="font-size:12.5px;color:var(--wood-light);line-height:1.5;margin-bottom:10px;">
-      Tire ou escolha uma foto da página do caderno. Cada linha deve começar com o nome do cliente.
+      Tire ou escolha uma foto da página do caderno.
     </p>
+    <label class="checkbox-field" style="margin-bottom:10px;"><input type="checkbox" id="foto-modo-tabela-check"> Meu caderno é uma tabela (colunas fixas)</label>
     <div class="field">
       <input type="file" id="foto-caderno-input" accept="image/*" capture="environment">
     </div>
@@ -3435,7 +3632,8 @@ function fotoCadernoModalHTML(){
       <button type="button" class="btn ghost" id="cancel-modal">Cancelar</button>
       <button type="button" class="btn primary" id="processar-foto-btn">Processar foto</button>
     </div>
-    <button type="button" class="link-btn" id="config-vision-btn" style="margin-top:12px;">Configurar chave da Cloud Vision</button>
+    <button type="button" class="link-btn" id="config-vision-btn" style="margin-top:12px;display:block;">Configurar chave da Cloud Vision</button>
+    <button type="button" class="link-btn" id="config-colunas-btn" style="margin-top:6px;display:block;">Configurar colunas da tabela</button>
   `;
 }
 function bindFotoCadernoModal(){
@@ -3455,24 +3653,49 @@ function bindFotoCadernoModal(){
       showToast('Configure a chave da Cloud Vision antes (link abaixo do botão).', 5000);
       return;
     }
+    const modoTabela = document.getElementById('foto-modo-tabela-check').checked;
     const statusEl = document.getElementById('foto-caderno-status');
     statusEl.textContent = 'Lendo a foto, aguarde...';
     try{
       const base64 = await fileParaBase64(selectedFile);
-      const texto = await extrairTextoDaFoto(base64);
-      if(!texto.trim()){
-        statusEl.textContent = '';
-        showToast('Não consegui ler nenhum texto nessa foto. Tente com mais luz/foco.', 5000);
-        return;
+      if(modoTabela){
+        const bloco = await chamarCloudVision(base64);
+        const textoDebug = bloco.fullTextAnnotation ? bloco.fullTextAnnotation.text : '';
+        const palavras = extrairPalavrasComPosicao(bloco);
+        if(palavras.length===0){
+          statusEl.textContent = '';
+          showToast('Não consegui ler nenhum texto nessa foto. Tente com mais luz/foco.', 5000);
+          return;
+        }
+        const resultado = parseTabelaCaderno(palavras);
+        if(resultado.erro){
+          statusEl.textContent = '';
+          showToast(resultado.erro, 6000);
+          return;
+        }
+        if(resultado.pedidos.length===0){
+          statusEl.textContent = '';
+          showToast('Nenhum pedido reconhecido nessa foto.', 5000);
+          return;
+        }
+        closeModal();
+        abrirRevisaoPedidosDetectados(resultado.pedidos, textoDebug);
+      }else{
+        const texto = await extrairTextoDaFoto(base64);
+        if(!texto.trim()){
+          statusEl.textContent = '';
+          showToast('Não consegui ler nenhum texto nessa foto. Tente com mais luz/foco.', 5000);
+          return;
+        }
+        const pedidosDetectados = parseCadernoTexto(texto);
+        if(pedidosDetectados.length===0){
+          statusEl.textContent = '';
+          showToast('Nenhum pedido reconhecido nessa foto.', 5000);
+          return;
+        }
+        closeModal();
+        abrirRevisaoPedidosDetectados(pedidosDetectados, texto);
       }
-      const pedidosDetectados = parseCadernoTexto(texto);
-      if(pedidosDetectados.length===0){
-        statusEl.textContent = '';
-        showToast('Nenhum pedido reconhecido nessa foto.', 5000);
-        return;
-      }
-      closeModal();
-      abrirRevisaoPedidosDetectados(pedidosDetectados, texto);
     }catch(e){
       statusEl.textContent = '';
       console.error(e);
@@ -3482,6 +3705,65 @@ function bindFotoCadernoModal(){
   document.getElementById('config-vision-btn').addEventListener('click', ()=>{
     openModal(configVisionModalHTML());
     bindConfigVisionModal();
+  });
+  document.getElementById('config-colunas-btn').addEventListener('click', ()=>{
+    openModal(configColunasTabelaModalHTML());
+    bindConfigColunasTabelaModal();
+  });
+}
+
+function configColunasTabelaModalHTML(){
+  return `
+    <h3>Colunas fixas da tabela</h3>
+    <p style="font-size:12.5px;color:var(--wood-light);line-height:1.5;margin-bottom:10px;">
+      Configure quais colunas do seu caderno têm produto fixo (ex: "CAIPIRA", "JAPONÊS"). As demais colunas soltas são lidas normalmente pelo código.
+    </p>
+    <div id="colunas-lista">${tabelaColunasConfig.map((c,idx)=>colunaConfigItemHTML(c,idx)).join('')}</div>
+    <button type="button" class="link-btn" id="add-coluna-config-btn" style="margin:8px 0;">+ adicionar coluna</button>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="cancel-modal" style="flex:1;">Fechar</button>
+      <button type="button" class="btn primary" id="salvar-colunas-config-btn">Salvar</button>
+    </div>
+  `;
+}
+function colunaConfigItemHTML(c, idx){
+  return `
+    <div class="coluna-config-item" data-coluna-idx="${idx}">
+      <input type="text" data-coluna-cabecalho="${idx}" value="${escapeAttr(c.cabecalho||'')}" placeholder="Cabeçalho (ex: CAIPIRA)">
+      <select data-coluna-produto="${idx}">
+        <option value="">Produto...</option>
+        ${sortByName(products).map(p=>`<option value="${p.id}" ${c.produtoId===p.id?'selected':''}>${escapeHtml(labelProdutoDisambiguado(p))}</option>`).join('')}
+      </select>
+      <button type="button" class="icon-btn small" data-remove-coluna="${idx}">${ICON.trash}</button>
+    </div>
+  `;
+}
+function bindConfigColunasTabelaModal(){
+  document.getElementById('cancel-modal').addEventListener('click', closeModal);
+  function rebind(){
+    document.querySelectorAll('[data-coluna-cabecalho]').forEach(inp=>inp.addEventListener('input', ()=>{
+      tabelaColunasConfig[inp.dataset.colunaCabecalho].cabecalho = inp.value;
+    }));
+    document.querySelectorAll('[data-coluna-produto]').forEach(sel=>sel.addEventListener('change', ()=>{
+      tabelaColunasConfig[sel.dataset.colunaProduto].produtoId = sel.value;
+    }));
+    document.querySelectorAll('[data-remove-coluna]').forEach(btn=>btn.addEventListener('click', ()=>{
+      tabelaColunasConfig.splice(Number(btn.dataset.removeColuna),1);
+      document.getElementById('colunas-lista').innerHTML = tabelaColunasConfig.map((c,idx)=>colunaConfigItemHTML(c,idx)).join('');
+      rebind();
+    }));
+  }
+  rebind();
+  document.getElementById('add-coluna-config-btn').addEventListener('click', ()=>{
+    tabelaColunasConfig.push({ cabecalho:'', produtoId:'' });
+    document.getElementById('colunas-lista').innerHTML = tabelaColunasConfig.map((c,idx)=>colunaConfigItemHTML(c,idx)).join('');
+    rebind();
+  });
+  document.getElementById('salvar-colunas-config-btn').addEventListener('click', async ()=>{
+    tabelaColunasConfig = tabelaColunasConfig.filter(c=>c.cabecalho.trim() && c.produtoId);
+    await saveTabelaColunasConfig();
+    showToast('Colunas salvas.');
+    closeModal();
   });
 }
 
@@ -4197,6 +4479,7 @@ async function startAppAfterAuth(){
 
   await loadSyncConfig();
   await loadCloudVisionKey();
+  await loadTabelaColunasConfig();
   if(syncUrl){
     await pullFromCloud(false);
   }
@@ -4229,3 +4512,4 @@ async function startAppAfterAuth(){
 </body>
 </html>
 
+  
