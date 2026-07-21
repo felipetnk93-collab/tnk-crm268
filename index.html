@@ -375,6 +375,7 @@
   .revisao-bloco.excluido{opacity:0.5;}
   .revisao-bloco-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
   .revisao-bloco-header select{flex:1;min-width:0;}
+  .revisao-bloco-header select[data-revisao-pago]{flex:0 0 auto;width:auto;}
   .revisao-incluir{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--wood-light);white-space:nowrap;}
   .revisao-item{margin-bottom:6px;}
   .revisao-item.needs-review-item{background:#FDF1D6;border-radius:6px;padding:6px;}
@@ -618,6 +619,16 @@ function melhorMatchProduto(texto){
   });
   return melhor;
 }
+function separarUnidadeDoCodigo(codigo){
+  const palavras = codigo.trim().split(/\s+/);
+  if(palavras.length>1){
+    const primeiraNorm = normalizeSearch(palavras[0]);
+    if(UNIDADE_PALAVRAS[primeiraNorm]){
+      return { unidadeExplicita: UNIDADE_PALAVRAS[primeiraNorm], codigoLimpo: palavras.slice(1).join(' ') };
+    }
+  }
+  return { unidadeExplicita: null, codigoLimpo: codigo };
+}
 function encontrarProdutoPorCodigo(codigo){
   const norm = normalizeSearch(codigo).trim();
   if(!norm) return null;
@@ -646,6 +657,13 @@ function parseLinhaCaderno(linha){
     if(m){ clienteNomeBusca = m[1]; restante = m[2]; }
   }
 
+  let pago = false;
+  const marcaPagoMatch = restante.match(/[\s,;.]+(pg|pago)[\s,;.]*$/i);
+  if(marcaPagoMatch){
+    pago = true;
+    restante = restante.slice(0, marcaPagoMatch.index).trim();
+  }
+
   const regex = /(\d+(?:[.,]\d+)?)/g;
   let match;
   const posicoes = [];
@@ -656,19 +674,20 @@ function parseLinhaCaderno(linha){
   for(let i=0;i<posicoes.length;i++){
     const inicio = posicoes[i].fim;
     const fim = (i+1<posicoes.length) ? posicoes[i+1].index : restante.length;
-    const codigo = restante.slice(inicio, fim).trim();
-    if(!codigo) continue;
-    const produto = encontrarProdutoPorCodigo(codigo);
+    const codigoBruto = restante.slice(inicio, fim).trim();
+    if(!codigoBruto) continue;
+    const { unidadeExplicita, codigoLimpo } = separarUnidadeDoCodigo(codigoBruto);
+    const produto = encontrarProdutoPorCodigo(codigoLimpo);
     itens.push({
       produtoId: produto ? produto.id : '',
       produtoNome: produto ? produto.nome : '',
-      codigoOriginal: codigo,
-      unidade: produto ? produto.unidade : '',
+      codigoOriginal: codigoBruto,
+      unidade: unidadeExplicita || (produto ? produto.unidade : ''),
       qtd: posicoes[i].valor,
       precoUnit: produto ? produto.preco : ''
     });
   }
-  return { clienteId, clienteNome, clienteNomeBusca, itens, linhaOriginal: linha };
+  return { clienteId, clienteNome, clienteNomeBusca, itens, pago, linhaOriginal: linha };
 }
 function parseCadernoTexto(textoCompleto){
   const linhas = textoCompleto.split('\n').map(l=>l.trim()).filter(Boolean);
@@ -3498,6 +3517,10 @@ function revisaoBlocoHTML(p, idx){
           <option value="">${p.clienteNomeBusca ? 'Não reconhecido: "'+escapeHtml(p.clienteNomeBusca)+'"' : 'Selecione o cliente...'}</option>
           ${sortByName(clients).map(c=>`<option value="${c.id}" ${p.clienteId===c.id?'selected':''}>${escapeHtml(c.nome)}</option>`).join('')}
         </select>
+        <select data-revisao-pago="${idx}" class="pay-status-select ${p.pago?'pago':'pendente'}">
+          <option value="pendente" ${!p.pago?'selected':''}>🟡 Pendente</option>
+          <option value="pago" ${p.pago?'selected':''}>🟢 Pago</option>
+        </select>
       </div>
       <div class="revisao-itens">
         ${p.itens.map((it,itIdx)=>revisaoItemHTML(it, idx, itIdx)).join('')}
@@ -3535,6 +3558,10 @@ function bindRevisaoListaEventos(){
   document.querySelectorAll('[data-revisao-cliente]').forEach(sel=>sel.addEventListener('change', ()=>{
     const idx = sel.dataset.revisaoCliente;
     pedidosDetectadosState[idx].clienteId = sel.value || null;
+  }));
+  document.querySelectorAll('[data-revisao-pago]').forEach(sel=>sel.addEventListener('change', ()=>{
+    const idx = sel.dataset.revisaoPago;
+    pedidosDetectadosState[idx].pago = sel.value==='pago';
   }));
   document.querySelectorAll('[data-revisao-produto]').forEach(sel=>sel.addEventListener('change', ()=>{
     const [blocoIdx, itIdx] = sel.dataset.revisaoProduto.split('-').map(Number);
@@ -3577,9 +3604,11 @@ function bindRevisaoPedidosModal(){
         };
       });
       if(itensValidos.length===0){ ignorados++; return; }
+      const totalPedido = itensValidos.reduce((s,it)=>s+it.qtd*it.precoUnit,0);
       orders.push({
         id: uid(), clienteId: p.clienteId, data: todayISO(), entregue:false,
-        statusPagamento:'pendente', formaPagamento:'', itens: itensValidos, valorPago:0, criadoEm: Date.now()
+        statusPagamento: p.pago?'pago':'pendente', formaPagamento:'', itens: itensValidos,
+        valorPago: p.pago?totalPedido:0, criadoEm: Date.now()
       });
       criados++;
     });
