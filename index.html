@@ -1315,6 +1315,22 @@ function scheduleCloudPush(){
   clearTimeout(cloudPushTimer);
   cloudPushTimer = setTimeout(()=>{ pushToCloud(); }, 1500);
 }
+function mesclarColecoes(local, remoto){
+  const porId = {};
+  (local||[]).forEach(item=>{ if(item && item.id) porId[item.id] = item; });
+  (remoto||[]).forEach(item=>{
+    if(!item || !item.id) return;
+    const atual = porId[item.id];
+    if(!atual){
+      porId[item.id] = item;
+    }else{
+      const tsAtual = atual.atualizadoEm || atual.criadoEm || 0;
+      const tsNovo = item.atualizadoEm || item.criadoEm || 0;
+      if(tsNovo > tsAtual) porId[item.id] = item;
+    }
+  });
+  return Object.values(porId);
+}
 async function pushToCloud(){
   if(!syncUrl) return false;
   syncing = true; updateSyncCloudStatusUI();
@@ -1322,6 +1338,31 @@ async function pushToCloud(){
   try{
     const validAuth = await ensureValidIdToken();
     const authParam = validAuth ? `?auth=${authIdToken}` : '';
+
+    // busca o que já está na nuvem antes de enviar, pra mesclar em vez de sobrescrever
+    let remoto = null;
+    try{
+      const cacheBust = (syncUrl.includes('?') ? '&' : '?') + '_ts=' + Date.now() + (validAuth ? `&auth=${authIdToken}` : '');
+      const resGet = await fetch(cleanSyncUrl(syncUrl) + '/data.json' + cacheBust, { cache: 'no-store' });
+      if(resGet.ok) remoto = await resGet.json();
+    }catch(e){ /* segue sem mesclar se a busca falhar */ }
+
+    if(remoto){
+      clients = mesclarColecoes(clients, remoto.clients);
+      products = mesclarColecoes(products, remoto.products);
+      orders = mesclarColecoes(orders, remoto.orders);
+      fornecedores = mesclarColecoes(fornecedores, remoto.fornecedores);
+      compras = mesclarColecoes(compras, remoto.compras);
+      caixas = mesclarColecoes(caixas, remoto.caixas);
+      migrateOrdersIfNeeded();
+      migrateComprasIfNeeded();
+      await Promise.all([
+        safeSet('ceasa_clients', clients), safeSet('ceasa_products', products), safeSet('ceasa_orders', orders),
+        safeSet('ceasa_fornecedores', fornecedores), safeSet('ceasa_compras', compras), safeSet('ceasa_caixas', caixas)
+      ]);
+      render();
+    }
+
     const ts = Date.now();
     const payload = { clients, products, orders, fornecedores, compras, caixas, updatedAt: ts };
     const res = await fetch(cleanSyncUrl(syncUrl) + '/data.json' + authParam, {
@@ -1369,12 +1410,12 @@ async function pullFromCloud(force){
         const remoteSnapshot = JSON.stringify({clients: remoteClients, products: remoteProducts, orders: remoteOrders, fornecedores: remoteFornecedores, compras: remoteCompras, caixas: remoteCaixas});
         const isDifferent = localSnapshot !== remoteSnapshot;
         if(force || isDifferent){
-          clients = remoteClients;
-          products = remoteProducts;
-          orders = remoteOrders;
-          fornecedores = remoteFornecedores;
-          compras = remoteCompras;
-          caixas = remoteCaixas;
+          clients = mesclarColecoes(clients, remoteClients);
+          products = mesclarColecoes(products, remoteProducts);
+          orders = mesclarColecoes(orders, remoteOrders);
+          fornecedores = mesclarColecoes(fornecedores, remoteFornecedores);
+          compras = mesclarColecoes(compras, remoteCompras);
+          caixas = mesclarColecoes(caixas, remoteCaixas);
           migrateOrdersIfNeeded();
           migrateComprasIfNeeded();
                 await Promise.all([
@@ -3198,7 +3239,7 @@ function attachContentEvents(){
   }));
   document.querySelectorAll('[data-toggle-entregue]').forEach(cb=>cb.addEventListener('change', ()=>{
     const o = orders.find(x=>x.id===cb.dataset.toggleEntregue);
-    if(o){ o.entregue = cb.checked; scheduleSaveOrders(); render(); }
+    if(o){ o.entregue = cb.checked; o.atualizadoEm = Date.now(); scheduleSaveOrders(); render(); }
   }));
   document.querySelectorAll('[data-status-pagamento]').forEach(sel=>sel.addEventListener('change', ()=>{
     const o = orders.find(x=>x.id===sel.dataset.statusPagamento);
@@ -3206,17 +3247,18 @@ function attachContentEvents(){
       o.statusPagamento = sel.value;
       if(sel.value==='pago') o.valorPago = orderTotal(o);
       if(sel.value==='pendente') o.valorPago = 0;
+      o.atualizadoEm = Date.now();
       scheduleSaveOrders(); render();
     }
   }));
   document.querySelectorAll('[data-forma-pagamento]').forEach(sel=>sel.addEventListener('change', ()=>{
     const o = orders.find(x=>x.id===sel.dataset.formaPagamento);
-    if(o){ o.formaPagamento = sel.value; scheduleSaveOrders(); render(); }
+    if(o){ o.formaPagamento = sel.value; o.atualizadoEm = Date.now(); scheduleSaveOrders(); render(); }
   }));
   document.querySelectorAll('[data-toggle-item-order]').forEach(cb=>cb.addEventListener('change', ()=>{
     const o = orders.find(x=>x.id===cb.dataset.toggleItemOrder);
     const idx = Number(cb.dataset.toggleItemIdx);
-    if(o && o.itens[idx]){ o.itens[idx].separado = cb.checked; scheduleSaveOrders(); render(); }
+    if(o && o.itens[idx]){ o.itens[idx].separado = cb.checked; o.atualizadoEm = Date.now(); scheduleSaveOrders(); render(); }
   }));
   document.querySelectorAll('[data-print-pedido]').forEach(b=>b.addEventListener('click', ()=>{
     printOrder(b.dataset.printPedido);
@@ -3425,6 +3467,7 @@ function bindPagamentoClienteModal(cliente){
       }else{
         o.statusPagamento = 'parcial';
       }
+      o.atualizadoEm = Date.now();
     }
     await saveOrders();
     closeModal();
@@ -3890,7 +3933,7 @@ function bindRevisaoPedidosModal(){
       orders.push({
         id: uid(), clienteId: p.clienteId, data: todayISO(), entregue:false,
         statusPagamento: p.pago?'pago':'pendente', formaPagamento:'', itens: itensValidos,
-        valorPago: p.pago?totalPedido:0, criadoEm: Date.now()
+        valorPago: p.pago?totalPedido:0, criadoEm: Date.now(), atualizadoEm: Date.now()
       });
       criados++;
     });
@@ -4098,9 +4141,9 @@ function bindPedidoForm(existing){
     else valorPago = existing ? (existing.valorPago||0) : 0;
 
     if(existing){
-      existing.clienteId = clienteId; existing.data = data; existing.entregue = entregue; existing.statusPagamento = statusPagamento; existing.formaPagamento = formaPagamento; existing.itens = itensValidos; existing.valorPago = valorPago;
+      existing.clienteId = clienteId; existing.data = data; existing.entregue = entregue; existing.statusPagamento = statusPagamento; existing.formaPagamento = formaPagamento; existing.itens = itensValidos; existing.valorPago = valorPago; existing.atualizadoEm = Date.now();
     }else{
-      orders.push({ id: uid(), clienteId, data, entregue, statusPagamento, formaPagamento, itens: itensValidos, valorPago, criadoEm: Date.now() });
+      orders.push({ id: uid(), clienteId, data, entregue, statusPagamento, formaPagamento, itens: itensValidos, valorPago, criadoEm: Date.now(), atualizadoEm: Date.now() });
     }
     await saveOrders();
     pedidoFilter = 'todos';
@@ -4512,4 +4555,3 @@ async function startAppAfterAuth(){
 </body>
 </html>
 
-  
