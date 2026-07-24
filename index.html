@@ -1315,7 +1315,32 @@ function scheduleCloudPush(){
   clearTimeout(cloudPushTimer);
   cloudPushTimer = setTimeout(()=>{ pushToCloud(); }, 1500);
 }
-function mesclarColecoes(local, remoto){
+let tombstones = { clients:[], products:[], orders:[], fornecedores:[], compras:[], caixas:[] };
+async function loadTombstones(){
+  try{
+    const t = await safeGet('ceasa_tombstones');
+    if(t) tombstones = Object.assign({ clients:[], products:[], orders:[], fornecedores:[], compras:[], caixas:[] }, t);
+  }catch(e){ /* sem tombstones salvos ainda */ }
+}
+async function saveTombstones(){
+  await safeSet('ceasa_tombstones', tombstones);
+}
+function marcarExcluido(colecaoNome, id){
+  if(!tombstones[colecaoNome]) tombstones[colecaoNome] = [];
+  tombstones[colecaoNome] = tombstones[colecaoNome].filter(t=>t.id!==id);
+  tombstones[colecaoNome].push({ id, excluidoEm: Date.now() });
+}
+function mesclarTombstones(local, remoto){
+  const porId = {};
+  (local||[]).forEach(t=>{ if(t && t.id) porId[t.id] = t; });
+  (remoto||[]).forEach(t=>{
+    if(!t || !t.id) return;
+    const atual = porId[t.id];
+    if(!atual || t.excluidoEm > atual.excluidoEm) porId[t.id] = t;
+  });
+  return Object.values(porId);
+}
+function mesclarColecoes(local, remoto, tombstonesColecao){
   const porId = {};
   (local||[]).forEach(item=>{ if(item && item.id) porId[item.id] = item; });
   (remoto||[]).forEach(item=>{
@@ -1329,7 +1354,14 @@ function mesclarColecoes(local, remoto){
       if(tsNovo > tsAtual) porId[item.id] = item;
     }
   });
-  return Object.values(porId);
+  const tombPorId = {};
+  (tombstonesColecao||[]).forEach(t=>{ tombPorId[t.id] = t; });
+  return Object.values(porId).filter(item=>{
+    const tomb = tombPorId[item.id];
+    if(!tomb) return true;
+    const tsItem = item.atualizadoEm || item.criadoEm || 0;
+    return tsItem > tomb.excluidoEm;
+  });
 }
 async function pushToCloud(){
   if(!syncUrl) return false;
@@ -1348,23 +1380,32 @@ async function pushToCloud(){
     }catch(e){ /* segue sem mesclar se a busca falhar */ }
 
     if(remoto){
-      clients = mesclarColecoes(clients, remoto.clients);
-      products = mesclarColecoes(products, remoto.products);
-      orders = mesclarColecoes(orders, remoto.orders);
-      fornecedores = mesclarColecoes(fornecedores, remoto.fornecedores);
-      compras = mesclarColecoes(compras, remoto.compras);
-      caixas = mesclarColecoes(caixas, remoto.caixas);
+      const remoteTombstones = remoto.tombstones || {};
+      tombstones.clients = mesclarTombstones(tombstones.clients, remoteTombstones.clients);
+      tombstones.products = mesclarTombstones(tombstones.products, remoteTombstones.products);
+      tombstones.orders = mesclarTombstones(tombstones.orders, remoteTombstones.orders);
+      tombstones.fornecedores = mesclarTombstones(tombstones.fornecedores, remoteTombstones.fornecedores);
+      tombstones.compras = mesclarTombstones(tombstones.compras, remoteTombstones.compras);
+      tombstones.caixas = mesclarTombstones(tombstones.caixas, remoteTombstones.caixas);
+
+      clients = mesclarColecoes(clients, remoto.clients, tombstones.clients);
+      products = mesclarColecoes(products, remoto.products, tombstones.products);
+      orders = mesclarColecoes(orders, remoto.orders, tombstones.orders);
+      fornecedores = mesclarColecoes(fornecedores, remoto.fornecedores, tombstones.fornecedores);
+      compras = mesclarColecoes(compras, remoto.compras, tombstones.compras);
+      caixas = mesclarColecoes(caixas, remoto.caixas, tombstones.caixas);
       migrateOrdersIfNeeded();
       migrateComprasIfNeeded();
       await Promise.all([
         safeSet('ceasa_clients', clients), safeSet('ceasa_products', products), safeSet('ceasa_orders', orders),
         safeSet('ceasa_fornecedores', fornecedores), safeSet('ceasa_compras', compras), safeSet('ceasa_caixas', caixas)
       ]);
+      await saveTombstones();
       render();
     }
 
     const ts = Date.now();
-    const payload = { clients, products, orders, fornecedores, compras, caixas, updatedAt: ts };
+    const payload = { clients, products, orders, fornecedores, compras, caixas, tombstones, updatedAt: ts };
     const res = await fetch(cleanSyncUrl(syncUrl) + '/data.json' + authParam, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -1410,18 +1451,27 @@ async function pullFromCloud(force){
         const remoteSnapshot = JSON.stringify({clients: remoteClients, products: remoteProducts, orders: remoteOrders, fornecedores: remoteFornecedores, compras: remoteCompras, caixas: remoteCaixas});
         const isDifferent = localSnapshot !== remoteSnapshot;
         if(force || isDifferent){
-          clients = mesclarColecoes(clients, remoteClients);
-          products = mesclarColecoes(products, remoteProducts);
-          orders = mesclarColecoes(orders, remoteOrders);
-          fornecedores = mesclarColecoes(fornecedores, remoteFornecedores);
-          compras = mesclarColecoes(compras, remoteCompras);
-          caixas = mesclarColecoes(caixas, remoteCaixas);
+          const remoteTombstones = remote.tombstones || {};
+          tombstones.clients = mesclarTombstones(tombstones.clients, remoteTombstones.clients);
+          tombstones.products = mesclarTombstones(tombstones.products, remoteTombstones.products);
+          tombstones.orders = mesclarTombstones(tombstones.orders, remoteTombstones.orders);
+          tombstones.fornecedores = mesclarTombstones(tombstones.fornecedores, remoteTombstones.fornecedores);
+          tombstones.compras = mesclarTombstones(tombstones.compras, remoteTombstones.compras);
+          tombstones.caixas = mesclarTombstones(tombstones.caixas, remoteTombstones.caixas);
+
+          clients = mesclarColecoes(clients, remoteClients, tombstones.clients);
+          products = mesclarColecoes(products, remoteProducts, tombstones.products);
+          orders = mesclarColecoes(orders, remoteOrders, tombstones.orders);
+          fornecedores = mesclarColecoes(fornecedores, remoteFornecedores, tombstones.fornecedores);
+          compras = mesclarColecoes(compras, remoteCompras, tombstones.compras);
+          caixas = mesclarColecoes(caixas, remoteCaixas, tombstones.caixas);
           migrateOrdersIfNeeded();
           migrateComprasIfNeeded();
                 await Promise.all([
             safeSet('ceasa_clients', clients), safeSet('ceasa_products', products), safeSet('ceasa_orders', orders),
             safeSet('ceasa_fornecedores', fornecedores), safeSet('ceasa_compras', compras), safeSet('ceasa_caixas', caixas)
           ]);
+          await saveTombstones();
           await saveSyncTimestamp(remote.updatedAt);
           render();
           applied = true;
@@ -3134,6 +3184,8 @@ function attachContentEvents(){
   }));
   document.querySelectorAll('[data-del-cliente]').forEach(b=>b.addEventListener('click', async ()=>{
     if(confirm('Remover este cliente? Pedidos ligados a ele continuarão registrados.')){
+      marcarExcluido('clients', b.dataset.delCliente);
+      await saveTombstones();
       clients = clients.filter(x=>x.id!==b.dataset.delCliente);
       await saveClients(); showToast('Cliente removido.'); render();
     }
@@ -3157,6 +3209,8 @@ function attachContentEvents(){
   }));
   document.querySelectorAll('[data-del-fornecedor]').forEach(b=>b.addEventListener('click', async ()=>{
     if(confirm('Remover este fornecedor? Compras ligadas a ele continuarão registradas.')){
+      marcarExcluido('fornecedores', b.dataset.delFornecedor);
+      await saveTombstones();
       fornecedores = fornecedores.filter(x=>x.id!==b.dataset.delFornecedor);
       await saveFornecedores(); showToast('Fornecedor removido.'); render();
     }
@@ -3179,6 +3233,8 @@ function attachContentEvents(){
   }));
   document.querySelectorAll('[data-del-caixa]').forEach(b=>b.addEventListener('click', async ()=>{
     if(confirm('Remover este registro de empréstimo?')){
+      marcarExcluido('caixas', b.dataset.delCaixa);
+      await saveTombstones();
       caixas = caixas.filter(x=>x.id!==b.dataset.delCaixa);
       await saveCaixas(); showToast('Registro removido.'); render();
     }
@@ -3213,6 +3269,8 @@ function attachContentEvents(){
   }));
   document.querySelectorAll('[data-del-produto]').forEach(b=>b.addEventListener('click', async ()=>{
     if(confirm('Remover este produto do quadro?')){
+      marcarExcluido('products', b.dataset.delProduto);
+      await saveTombstones();
       products = products.filter(x=>x.id!==b.dataset.delProduto);
       await saveProducts(); showToast('Produto removido.'); render();
     }
@@ -3235,6 +3293,8 @@ function attachContentEvents(){
   }));
   document.querySelectorAll('[data-del-pedido]').forEach(b=>b.addEventListener('click', async ()=>{
     if(confirm('Remover este pedido?')){
+      marcarExcluido('orders', b.dataset.delPedido);
+      await saveTombstones();
       orders = orders.filter(x=>x.id!==b.dataset.delPedido);
       await saveOrders(); showToast('Pedido removido.'); render();
     }
@@ -3336,6 +3396,8 @@ function attachContentEvents(){
   }));
   document.querySelectorAll('[data-del-compra]').forEach(b=>b.addEventListener('click', async ()=>{
     if(confirm('Remover esta compra?')){
+      marcarExcluido('compras', b.dataset.delCompra);
+      await saveTombstones();
       compras = compras.filter(x=>x.id!==b.dataset.delCompra);
       await saveCompras(); showToast('Compra removida.'); render();
     }
@@ -4528,6 +4590,7 @@ async function startAppAfterAuth(){
   await loadSyncConfig();
   await loadCloudVisionKey();
   await loadTabelaColunasConfig();
+  await loadTombstones();
   if(syncUrl){
     await pullFromCloud(false);
   }
