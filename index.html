@@ -2203,8 +2203,9 @@ function bindCaixaForm(existing){
     if(!data.pessoa || data.quantidade<=0) return;
     if(existing){
       Object.assign(existing, data);
+      existing.atualizadoEm = Date.now();
     }else{
-      caixas.push({id: uid(), ...data, quantidadeDevolvida: 0, criadoEm: Date.now()});
+      caixas.push({id: uid(), ...data, quantidadeDevolvida: 0, criadoEm: Date.now(), atualizadoEm: Date.now()});
     }
     await saveCaixas();
     showToast(existing?'Empréstimo atualizado.':'Empréstimo registrado.');
@@ -2236,6 +2237,7 @@ function bindDevolucaoCaixaModal(c){
     const qtd = parseFloat(document.getElementById('devolucao-input').value);
     if(!qtd || qtd<=0){ showToast('Digite uma quantidade válida.'); return; }
     c.quantidadeDevolvida = Number(c.quantidadeDevolvida||0) + qtd;
+    c.atualizadoEm = Date.now();
     await saveCaixas();
     closeModal();
     showToast('Devolução registrada.');
@@ -3368,11 +3370,11 @@ function attachContentEvents(){
   if(printCompraListBtn) printCompraListBtn.addEventListener('click', printCompraList);
   document.querySelectorAll('[data-status-pagamento-compra]').forEach(sel=>sel.addEventListener('change', ()=>{
     const c = compras.find(x=>x.id===sel.dataset.statusPagamentoCompra);
-    if(c){ c.statusPagamento = sel.value; saveCompras(); render(); }
+    if(c){ c.statusPagamento = sel.value; c.atualizadoEm = Date.now(); saveCompras(); render(); }
   }));
   document.querySelectorAll('[data-forma-pagamento-compra]').forEach(sel=>sel.addEventListener('change', ()=>{
     const c = compras.find(x=>x.id===sel.dataset.formaPagamentoCompra);
-    if(c){ c.formaPagamento = sel.value; saveCompras(); render(); }
+    if(c){ c.formaPagamento = sel.value; c.atualizadoEm = Date.now(); saveCompras(); render(); }
   }));
   const compraFilterSel = document.getElementById('compra-filter');
   if(compraFilterSel) compraFilterSel.addEventListener('change', (e)=>{ compraFilter = e.target.value; render(); });
@@ -3410,8 +3412,9 @@ function bindClienteForm(existing){
     if(!data.nome) return;
     if(existing){
       Object.assign(existing, data);
+      existing.atualizadoEm = Date.now();
     }else{
-      clients.push({id: uid(), ...data});
+      clients.push({id: uid(), ...data, criadoEm: Date.now(), atualizadoEm: Date.now()});
     }
     await saveClients();
     showToast(existing?'Cliente atualizado.':'Cliente adicionado.');
@@ -3491,8 +3494,9 @@ function bindFornecedorForm(existing){
     if(!data.nome) return;
     if(existing){
       Object.assign(existing, data);
+      existing.atualizadoEm = Date.now();
     }else{
-      fornecedores.push({id: uid(), ...data});
+      fornecedores.push({id: uid(), ...data, criadoEm: Date.now(), atualizadoEm: Date.now()});
     }
     await saveFornecedores();
     showToast(existing?'Fornecedor atualizado.':'Fornecedor adicionado.');
@@ -3514,8 +3518,9 @@ function bindProdutoForm(existing){
     if(!data.nome) return;
     if(existing){
       Object.assign(existing, data);
+      existing.atualizadoEm = Date.now();
     }else{
-      products.push({id: uid(), ...data});
+      products.push({id: uid(), ...data, criadoEm: Date.now(), atualizadoEm: Date.now()});
     }
     await saveProducts();
     showToast(existing?'Produto atualizado.':'Produto adicionado.');
@@ -4250,9 +4255,9 @@ function bindCompraForm(existing){
     if(itensValidos.length===0){ showToast('Adicione ao menos um item válido.'); return; }
 
     if(existing){
-      existing.fornecedorId = fornecedorId; existing.data = data; existing.statusPagamento = statusPagamento; existing.formaPagamento = formaPagamento; existing.itens = itensValidos;
+      existing.fornecedorId = fornecedorId; existing.data = data; existing.statusPagamento = statusPagamento; existing.formaPagamento = formaPagamento; existing.itens = itensValidos; existing.atualizadoEm = Date.now();
     }else{
-      compras.push({ id: uid(), fornecedorId, data, statusPagamento, formaPagamento, itens: itensValidos, criadoEm: Date.now() });
+      compras.push({ id: uid(), fornecedorId, data, statusPagamento, formaPagamento, itens: itensValidos, criadoEm: Date.now(), atualizadoEm: Date.now() });
     }
     await saveCompras();
     compraFilter = 'todos';
