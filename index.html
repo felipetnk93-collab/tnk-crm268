@@ -2098,6 +2098,7 @@ function renderCompras(){
         <option value="pago" ${compraFilter==='pago'?'selected':''}>Pagos</option>
       </select>
       <button class="btn primary" id="add-compra-btn">${ICON.plus} Nova</button>
+      <button class="btn ghost" id="resumo-compras-dia-btn">${ICON.crate} Resumo do dia</button>
       ${filtered.length>0 ? `<button class="btn ghost" id="print-compra-list-btn">${ICON.print} Imprimir</button>` : ''}
     </div>
     <div class="date-filter-row">
@@ -3450,6 +3451,8 @@ function attachContentEvents(){
   }));
   const printCompraListBtn = document.getElementById('print-compra-list-btn');
   if(printCompraListBtn) printCompraListBtn.addEventListener('click', printCompraList);
+  const resumoComprasDiaBtn = document.getElementById('resumo-compras-dia-btn');
+  if(resumoComprasDiaBtn) resumoComprasDiaBtn.addEventListener('click', ()=>{ openModal(resumoComprasDiaModalHTML()); bindResumoComprasDiaModal(); });
   document.querySelectorAll('[data-status-pagamento-compra]').forEach(sel=>sel.addEventListener('change', ()=>{
     const c = compras.find(x=>x.id===sel.dataset.statusPagamentoCompra);
     if(c){
@@ -3692,6 +3695,101 @@ function calcularFechamento(data){
   const entregues = pedidosDoDia.filter(o=>o.entregue).length;
   return { pedidosDoDia, totalVendido, totalRecebido, totalPendente, porForma, entregues };
 }
+// ---------- RESUMO DE COMPRAS DO DIA ----------
+let resumoComprasData = localDateISO(0);
+function calcularResumoComprasDia(data){
+  const comprasDoDia = compras.filter(c=>c.data===data);
+  const porProduto = {};
+  comprasDoDia.forEach(c=>{
+    c.itens.forEach(it=>{
+      if(!porProduto[it.produtoId]){
+        porProduto[it.produtoId] = { produtoNome: it.produtoNome, unidade: it.unidade, qtd: 0, valorTotal: 0 };
+      }
+      porProduto[it.produtoId].qtd += Number(it.qtd||0);
+      porProduto[it.produtoId].valorTotal += Number(it.qtd||0) * Number(it.custoUnit||0);
+    });
+  });
+  const lista = Object.values(porProduto).sort((a,b)=>a.produtoNome.localeCompare(b.produtoNome,'pt-BR',{sensitivity:'base'}));
+  const totalGasto = lista.reduce((s,p)=>s+p.valorTotal,0);
+  return { comprasDoDia, lista, totalGasto };
+}
+function resumoComprasDiaModalHTML(){
+  const r = calcularResumoComprasDia(resumoComprasData);
+  return `
+    <h3>Resumo de compras do dia</h3>
+    <div class="field"><label>Data</label><input type="date" id="resumo-compras-data-input" value="${resumoComprasData}"></div>
+    <div id="resumo-compras-conteudo">${resumoComprasConteudoHTML(r)}</div>
+    <div class="modal-actions" style="margin-top:14px;">
+      <button type="button" class="btn ghost" id="cancel-modal">Fechar</button>
+      <button type="button" class="btn primary" id="imprimir-resumo-compras-btn">${ICON.print} Imprimir</button>
+    </div>
+  `;
+}
+function resumoComprasConteudoHTML(r){
+  if(r.lista.length===0){
+    return `<p style="text-align:center;color:var(--wood-light);padding:20px 0;">Nenhuma compra registrada nesse dia.</p>`;
+  }
+  return `
+    <div class="fechamento-resumo">
+      ${r.lista.map(p=>`<div class="fechamento-linha"><span>${escapeHtml(p.produtoNome)}</span><span>${p.qtd}${abbrevUnidade(p.unidade)}</span></div>`).join('')}
+      <div class="fechamento-sep"></div>
+      <div class="fechamento-linha destaque"><span>Total gasto</span><span>${fmtMoney(r.totalGasto)}</span></div>
+    </div>
+  `;
+}
+function buildResumoComprasReceiptBytes(r, data){
+  let b = [];
+  const add = arr => { b = b.concat(arr); };
+  add(escposInit());
+  add(escposAlign(1)); add(escposBold(true)); add(escposSize(1,1));
+  add(escposLine('TANAKA - BOX 268'));
+  add(escposSize(0,0)); add(escposBold(false));
+  add(escposLine('CEAGESP - Sorocaba'));
+  add(escposLine('Resumo de compras - ' + fmtDate(data)));
+  add(escposAlign(0));
+  add(escposLine('-'.repeat(32)));
+  if(r.lista.length===0){
+    add(escposLine('Nenhuma compra registrada nesse dia.'));
+  }else{
+    r.lista.forEach(p=>{
+      add(escposLine(padLine(`${p.qtd}${abbrevUnidade(p.unidade)} ${p.produtoNome}`, '')));
+    });
+    add(escposLine('-'.repeat(32)));
+    add(escposBold(true)); add(escposSize(1,0));
+    add(escposLine(padLine('TOTAL GASTO', fmtMoney(r.totalGasto))));
+    add(escposSize(0,0)); add(escposBold(false));
+  }
+  add(escposFeed(3));
+  add(escposCut());
+  return b;
+}
+async function imprimirResumoCompras(data){
+  const r = calcularResumoComprasDia(data);
+  if(!btConnected){
+    showToast('Nenhuma impressora conectada. Toque em "Selecionar/Reconectar impressora" no topo da lista de pedidos.');
+    return;
+  }
+  try{
+    showToast('Enviando para a impressora...');
+    await sendBytesToPrinter(buildResumoComprasReceiptBytes(r, data));
+    showToast('Impresso!');
+  }catch(e){
+    console.error(e);
+    showToast('Falha ao imprimir via Bluetooth. Verifique a impressora.');
+  }
+}
+function bindResumoComprasDiaModal(){
+  document.getElementById('cancel-modal').addEventListener('click', closeModal);
+  const dataInput = document.getElementById('resumo-compras-data-input');
+  dataInput.addEventListener('change', ()=>{
+    resumoComprasData = dataInput.value;
+    document.getElementById('resumo-compras-conteudo').innerHTML = resumoComprasConteudoHTML(calcularResumoComprasDia(resumoComprasData));
+  });
+  document.getElementById('imprimir-resumo-compras-btn').addEventListener('click', ()=>{
+    imprimirResumoCompras(resumoComprasData);
+  });
+}
+
 function fechamentoDiaModalHTML(){
   const f = calcularFechamento(fechamentoData);
   return `
