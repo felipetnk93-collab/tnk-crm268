@@ -1066,6 +1066,7 @@ function migrateComprasIfNeeded(){
   compras.forEach(cp=>{
     if(typeof cp.statusPagamento !== 'string'){ cp.statusPagamento = 'pendente'; changed = true; }
     if(typeof cp.formaPagamento !== 'string'){ cp.formaPagamento = ''; changed = true; }
+    if(typeof cp.valorPago !== 'number'){ cp.valorPago = cp.statusPagamento==='pago' ? compraTotal(cp) : 0; changed = true; }
   });
   if(changed) saveCompras();
 }
@@ -1754,18 +1755,25 @@ function renderFornecedores(){
     `}
   `;
 }
+function fornecedorTotalPendente(fornecedorId){
+  return compras.filter(c=>c.fornecedorId===fornecedorId && c.statusPagamento!=='pago')
+    .reduce((s,c)=>s + (compraTotal(c) - (c.valorPago||0)), 0);
+}
 function fornecedorCardHTML(f){
   const totalGasto = compras.filter(c=>c.fornecedorId===f.id).reduce((s,c)=>s+compraTotal(c),0);
   const numCompras = compras.filter(c=>c.fornecedorId===f.id).length;
+  const totalPendente = fornecedorTotalPendente(f.id);
   return `
     <div class="item-card">
       <div class="info clickable" data-view-compras="${f.id}">
         <div class="name">${escapeHtml(f.nome)}</div>
         <div class="meta">
           ${f.telefone ? `${escapeHtml(f.telefone)} · ` : ''}${numCompras} compra(s) · Total gasto: ${fmtMoney(totalGasto)}
+          ${totalPendente>0.001 ? `<br><span style="color:var(--tomato-dark);font-weight:600;">Pendente: ${fmtMoney(totalPendente)}</span>` : ''}
         </div>
       </div>
       <div class="actions-row">
+        ${totalPendente>0.001 ? `<button class="icon-btn" data-registrar-pagamento-fornecedor="${f.id}" title="Registrar pagamento">${ICON.money}</button>` : ''}
         <button class="icon-btn" data-edit-fornecedor="${f.id}">${ICON.edit}</button>
         <button class="icon-btn danger" data-del-fornecedor="${f.id}">${ICON.trash}</button>
       </div>
@@ -2106,7 +2114,11 @@ function renderCompras(){
     <div class="printer-status-bar">${renderPrinterStatusBar()}</div>
     ${fornecedorFiltrado ? `
       <div class="filter-banner">
-        Mostrando compras de <strong>${escapeHtml(fornecedorFiltrado.nome)}</strong>
+        <div style="flex:1;min-width:180px;">
+          Mostrando compras de <strong>${escapeHtml(fornecedorFiltrado.nome)}</strong>
+          ${fornecedorTotalPendente(fornecedorFiltrado.id)>0.001 ? `<br><span style="color:var(--tomato-dark);font-weight:600;">Pendente: ${fmtMoney(fornecedorTotalPendente(fornecedorFiltrado.id))}</span>` : ''}
+        </div>
+        ${fornecedorTotalPendente(fornecedorFiltrado.id)>0.001 ? `<button class="btn primary small" data-registrar-pagamento-fornecedor="${fornecedorFiltrado.id}">${ICON.money} Registrar pagamento</button>` : ''}
         <button id="clear-fornecedor-filter" class="link-btn">ver todas as compras</button>
       </div>
     ` : ''}
@@ -2142,14 +2154,15 @@ function compraCardHTML(c){
         `).join('')}
       </div>
       <div class="order-card-bottom">
-        <div class="order-total-tag">${fmtMoney(compraTotal(c))}</div>
+        <div class="order-total-tag">${fmtMoney(compraTotal(c))}${c.statusPagamento==='parcial' ? `<div class="order-parcial-info">Pago: ${fmtMoney(c.valorPago||0)} · Falta: ${fmtMoney(compraTotal(c)-(c.valorPago||0))}</div>` : ''}</div>
         <div class="status-checks">
           <select class="forma-pag-select" data-forma-pagamento-compra="${c.id}">
             <option value="" ${!c.formaPagamento?'selected':''}>Forma de pgto.</option>
             ${FORMAS_PAGAMENTO.map(f=>`<option value="${f.v}" ${c.formaPagamento===f.v?'selected':''}>${f.icon} ${f.label}</option>`).join('')}
           </select>
-          <select class="pay-status-select ${c.statusPagamento==='pago'?'pago':'pendente'}" data-status-pagamento-compra="${c.id}">
-            <option value="pendente" ${c.statusPagamento!=='pago'?'selected':''}>🟡 Pendente</option>
+          <select class="pay-status-select ${c.statusPagamento==='pago'?'pago':(c.statusPagamento==='parcial'?'parcial':'pendente')}" data-status-pagamento-compra="${c.id}">
+            <option value="pendente" ${c.statusPagamento==='pendente'?'selected':''}>🟡 Pendente</option>
+            <option value="parcial" ${c.statusPagamento==='parcial'?'selected':''}>🔵 Parcial</option>
             <option value="pago" ${c.statusPagamento==='pago'?'selected':''}>🟢 Pago</option>
           </select>
         </div>
@@ -3098,8 +3111,9 @@ function compraFormHTML(c){
       <div class="order-total"><span class="lbl">Total</span><span class="val" id="compra-total-display">${fmtMoney(0)}</span></div>
       <div class="field">
         <label>Status de pagamento</label>
-        <select id="f-status-pagamento-compra" class="pay-status-select ${c.statusPagamento==='pago'?'pago':'pendente'}" style="width:100%;">
-          <option value="pendente" ${c.statusPagamento!=='pago'?'selected':''}>🟡 Pendente</option>
+        <select id="f-status-pagamento-compra" class="pay-status-select ${c.statusPagamento==='pago'?'pago':(c.statusPagamento==='parcial'?'parcial':'pendente')}" style="width:100%;">
+          <option value="pendente" ${c.statusPagamento==='pendente'?'selected':''}>🟡 Pendente</option>
+          <option value="parcial" ${c.statusPagamento==='parcial'?'selected':''}>🔵 Parcial${c.statusPagamento==='parcial'?' (falta '+fmtMoney(compraTotal(c)-(c.valorPago||0))+')':''}</option>
           <option value="pago" ${c.statusPagamento==='pago'?'selected':''}>🟢 Pago</option>
         </select>
       </div>
@@ -3203,6 +3217,12 @@ function attachContentEvents(){
   // FORNECEDORES
   const addFornecedor = document.getElementById('add-fornecedor-btn');
   if(addFornecedor) addFornecedor.addEventListener('click', ()=>{ openModal(fornecedorFormHTML(null)); bindFornecedorForm(null); });
+  document.querySelectorAll('[data-registrar-pagamento-fornecedor]').forEach(b=>b.addEventListener('click', ()=>{
+    const f = fornecedores.find(x=>x.id===b.dataset.registrarPagamentoFornecedor);
+    if(!f) return;
+    openModal(pagamentoFornecedorModalHTML(f));
+    bindPagamentoFornecedorModal(f);
+  }));
   document.querySelectorAll('[data-edit-fornecedor]').forEach(b=>b.addEventListener('click', ()=>{
     const f = fornecedores.find(x=>x.id===b.dataset.editFornecedor);
     openModal(fornecedorFormHTML(f)); bindFornecedorForm(f);
@@ -3432,7 +3452,13 @@ function attachContentEvents(){
   if(printCompraListBtn) printCompraListBtn.addEventListener('click', printCompraList);
   document.querySelectorAll('[data-status-pagamento-compra]').forEach(sel=>sel.addEventListener('change', ()=>{
     const c = compras.find(x=>x.id===sel.dataset.statusPagamentoCompra);
-    if(c){ c.statusPagamento = sel.value; c.atualizadoEm = Date.now(); saveCompras(); render(); }
+    if(c){
+      c.statusPagamento = sel.value;
+      if(sel.value==='pago') c.valorPago = compraTotal(c);
+      if(sel.value==='pendente') c.valorPago = 0;
+      c.atualizadoEm = Date.now();
+      saveCompras(); render();
+    }
   }));
   document.querySelectorAll('[data-forma-pagamento-compra]').forEach(sel=>sel.addEventListener('change', ()=>{
     const c = compras.find(x=>x.id===sel.dataset.formaPagamentoCompra);
@@ -3540,6 +3566,67 @@ function bindPagamentoClienteModal(cliente){
       showToast(`Pagamento registrado. Sobraram ${fmtMoney(restante)} sem pedido pendente pra aplicar.`, 5000);
     }else{
       showToast(`Pagamento registrado! ${quitados} pedido(s) quitado(s).`);
+    }
+    render();
+  });
+}
+
+function pagamentoFornecedorModalHTML(fornecedor){
+  const totalPendente = fornecedorTotalPendente(fornecedor.id);
+  const comprasPendentes = compras.filter(c=>c.fornecedorId===fornecedor.id && c.statusPagamento!=='pago')
+    .sort((a,b)=>a.data.localeCompare(b.data)||a.criadoEm-b.criadoEm);
+  return `
+    <h3>Registrar pagamento</h3>
+    <p style="font-size:13px;color:var(--wood-light);margin-bottom:4px;">${escapeHtml(fornecedor.nome)}</p>
+    <div class="order-total" style="margin-top:0;">
+      <span class="lbl">Total pendente</span>
+      <span class="val">${fmtMoney(totalPendente)}</span>
+    </div>
+    <div class="field">
+      <label>Valor pago agora (R$)</label>
+      <input type="number" min="0.01" step="0.01" id="valor-pagamento-fornecedor-input" placeholder="0,00" onfocus="this.select()">
+    </div>
+    <p style="font-size:11.5px;color:var(--wood-light);line-height:1.5;">
+      O valor é aplicado nas ${comprasPendentes.length} compra(s) em aberto, começando pela mais antiga. Se não quitar tudo, o restante fica marcado como pagamento parcial.
+    </p>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="cancel-modal">Cancelar</button>
+      <button type="button" class="btn primary" id="confirmar-pagamento-fornecedor-btn">Registrar</button>
+    </div>
+  `;
+}
+function bindPagamentoFornecedorModal(fornecedor){
+  document.getElementById('cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('confirmar-pagamento-fornecedor-btn').addEventListener('click', async ()=>{
+    const valor = parseFloat(document.getElementById('valor-pagamento-fornecedor-input').value);
+    if(!valor || valor<=0){ showToast('Digite um valor válido.'); return; }
+    const pendentes = compras.filter(c=>c.fornecedorId===fornecedor.id && c.statusPagamento!=='pago')
+      .sort((a,b)=>a.data.localeCompare(b.data)||a.criadoEm-b.criadoEm);
+    let restante = valor;
+    let quitados = 0;
+    for(const c of pendentes){
+      if(restante<=0.001) break;
+      const totalCompra = compraTotal(c);
+      const jaPago = c.valorPago||0;
+      const faltaCompra = totalCompra - jaPago;
+      if(faltaCompra<=0) continue;
+      const aplicar = Math.min(restante, faltaCompra);
+      c.valorPago = jaPago + aplicar;
+      restante -= aplicar;
+      if(c.valorPago >= totalCompra - 0.001){
+        c.statusPagamento = 'pago';
+        quitados++;
+      }else{
+        c.statusPagamento = 'parcial';
+      }
+      c.atualizadoEm = Date.now();
+    }
+    await saveCompras();
+    closeModal();
+    if(restante>0.001){
+      showToast(`Pagamento registrado. Sobraram ${fmtMoney(restante)} sem compra pendente pra aplicar.`, 5000);
+    }else{
+      showToast(`Pagamento registrado! ${quitados} compra(s) quitada(s).`);
     }
     render();
   });
@@ -4315,11 +4402,16 @@ function bindCompraForm(existing){
       return { produtoId: it.produtoId, produtoNome: p.nome, unidade: p.unidade, qtd: Number(it.qtd), custoUnit: custoFinal };
     });
     if(itensValidos.length===0){ showToast('Adicione ao menos um item válido.'); return; }
+    const novoTotalCompra = itensValidos.reduce((s,i)=>s+i.qtd*i.custoUnit,0);
+    let valorPagoCompra;
+    if(statusPagamento==='pago') valorPagoCompra = novoTotalCompra;
+    else if(statusPagamento==='pendente') valorPagoCompra = 0;
+    else valorPagoCompra = existing ? (existing.valorPago||0) : 0;
 
     if(existing){
-      existing.fornecedorId = fornecedorId; existing.data = data; existing.statusPagamento = statusPagamento; existing.formaPagamento = formaPagamento; existing.itens = itensValidos; existing.atualizadoEm = Date.now();
+      existing.fornecedorId = fornecedorId; existing.data = data; existing.statusPagamento = statusPagamento; existing.formaPagamento = formaPagamento; existing.itens = itensValidos; existing.valorPago = valorPagoCompra; existing.atualizadoEm = Date.now();
     }else{
-      compras.push({ id: uid(), fornecedorId, data, statusPagamento, formaPagamento, itens: itensValidos, criadoEm: Date.now(), atualizadoEm: Date.now() });
+      compras.push({ id: uid(), fornecedorId, data, statusPagamento, formaPagamento, itens: itensValidos, valorPago: valorPagoCompra, criadoEm: Date.now(), atualizadoEm: Date.now() });
     }
     await saveCompras();
     compraFilter = 'todos';
