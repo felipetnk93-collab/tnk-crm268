@@ -3781,20 +3781,15 @@ function buildResumoComprasReceiptBytes(r, dataCompra, dataVenda){
   add(escposLine('TANAKA - BOX 268'));
   add(escposSize(0,0)); add(escposBold(false));
   add(escposLine('CEAGESP - Sorocaba'));
-  add(escposLine('Compra ' + fmtDate(dataCompra) + ' / Venda ' + fmtDate(dataVenda)));
+  add(escposLine('Compra ' + fmtDate(dataCompra)));
   add(escposAlign(0));
   add(escposLine('-'.repeat(32)));
   if(r.lista.length===0){
     add(escposLine('Nenhuma compra registrada nesse dia.'));
   }else{
     r.lista.forEach(p=>{
-      add(escposLine(`${p.produtoNome}`));
-      add(escposLine(`  Comp:${p.qtd} Vend:${p.vendido} Resta:${p.restante}${abbrevUnidade(p.unidade)}`));
+      add(escposLine(`${p.qtd}${abbrevUnidade(p.unidade)} ${p.produtoNome}`));
     });
-    add(escposLine('-'.repeat(32)));
-    add(escposBold(true)); add(escposSize(1,0));
-    add(escposLine(padLine('TOTAL GASTO', fmtMoney(r.totalGasto))));
-    add(escposSize(0,0)); add(escposBold(false));
   }
   add(escposFeed(3));
   add(escposCut());
@@ -4860,3 +4855,4 @@ async function startAppAfterAuth(){
 </body>
 </html>
 
+  
