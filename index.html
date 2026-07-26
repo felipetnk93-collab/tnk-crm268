@@ -3695,15 +3695,21 @@ function calcularFechamento(data){
   const entregues = pedidosDoDia.filter(o=>o.entregue).length;
   return { pedidosDoDia, totalVendido, totalRecebido, totalPendente, porForma, entregues };
 }
-// ---------- RESUMO DE COMPRAS DO DIA ----------
+// ---------- RESUMO DE COMPRAS DO DIA (com desconto de vendas) ----------
 let resumoComprasData = localDateISO(0);
+let resumoVendaData = localDateISO(1);
+function addDiasISO(dataISO, dias){
+  const d = new Date(dataISO + 'T00:00:00');
+  d.setDate(d.getDate() + dias);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 function calcularResumoComprasDia(data){
   const comprasDoDia = compras.filter(c=>c.data===data);
   const porProduto = {};
   comprasDoDia.forEach(c=>{
     c.itens.forEach(it=>{
       if(!porProduto[it.produtoId]){
-        porProduto[it.produtoId] = { produtoNome: it.produtoNome, unidade: it.unidade, qtd: 0, valorTotal: 0 };
+        porProduto[it.produtoId] = { produtoId: it.produtoId, produtoNome: it.produtoNome, unidade: it.unidade, qtd: 0, valorTotal: 0 };
       }
       porProduto[it.produtoId].qtd += Number(it.qtd||0);
       porProduto[it.produtoId].valorTotal += Number(it.qtd||0) * Number(it.custoUnit||0);
@@ -3713,11 +3719,33 @@ function calcularResumoComprasDia(data){
   const totalGasto = lista.reduce((s,p)=>s+p.valorTotal,0);
   return { comprasDoDia, lista, totalGasto };
 }
+function calcularVendidoPorProduto(dataVenda){
+  const pedidosDoDia = orders.filter(o=>o.data===dataVenda);
+  const vendidoPorProduto = {};
+  pedidosDoDia.forEach(o=>{
+    o.itens.forEach(it=>{
+      vendidoPorProduto[it.produtoId] = (vendidoPorProduto[it.produtoId]||0) + Number(it.qtd||0);
+    });
+  });
+  return vendidoPorProduto;
+}
+function calcularResumoComprasComVendas(dataCompra, dataVenda){
+  const resumo = calcularResumoComprasDia(dataCompra);
+  const vendidoPorProduto = calcularVendidoPorProduto(dataVenda);
+  const lista = resumo.lista.map(p=>{
+    const vendido = vendidoPorProduto[p.produtoId] || 0;
+    return { ...p, vendido, restante: p.qtd - vendido };
+  });
+  return { ...resumo, lista };
+}
 function resumoComprasDiaModalHTML(){
-  const r = calcularResumoComprasDia(resumoComprasData);
+  const r = calcularResumoComprasComVendas(resumoComprasData, resumoVendaData);
   return `
     <h3>Resumo de compras do dia</h3>
-    <div class="field"><label>Data</label><input type="date" id="resumo-compras-data-input" value="${resumoComprasData}"></div>
+    <div class="row2">
+      <div class="field"><label>Data da compra</label><input type="date" id="resumo-compras-data-input" value="${resumoComprasData}"></div>
+      <div class="field"><label>Data da venda</label><input type="date" id="resumo-venda-data-input" value="${resumoVendaData}"></div>
+    </div>
     <div id="resumo-compras-conteudo">${resumoComprasConteudoHTML(r)}</div>
     <div class="modal-actions" style="margin-top:14px;">
       <button type="button" class="btn ghost" id="cancel-modal">Fechar</button>
@@ -3731,13 +3759,21 @@ function resumoComprasConteudoHTML(r){
   }
   return `
     <div class="fechamento-resumo">
-      ${r.lista.map(p=>`<div class="fechamento-linha"><span>${escapeHtml(p.produtoNome)}</span><span>${p.qtd}${abbrevUnidade(p.unidade)}</span></div>`).join('')}
+      <div class="fechamento-linha" style="font-size:10.5px;color:var(--wood-light);font-weight:600;">
+        <span>Produto</span><span>Comprado · Vendido · Resta</span>
+      </div>
+      ${r.lista.map(p=>`
+        <div class="fechamento-linha ${p.restante<0?'atencao':''}">
+          <span>${escapeHtml(p.produtoNome)}</span>
+          <span>${p.qtd}${abbrevUnidade(p.unidade)} · ${p.vendido}${abbrevUnidade(p.unidade)} · <strong>${p.restante}${abbrevUnidade(p.unidade)}</strong></span>
+        </div>
+      `).join('')}
       <div class="fechamento-sep"></div>
-      <div class="fechamento-linha destaque"><span>Total gasto</span><span>${fmtMoney(r.totalGasto)}</span></div>
+      <div class="fechamento-linha destaque"><span>Total gasto na compra</span><span>${fmtMoney(r.totalGasto)}</span></div>
     </div>
   `;
 }
-function buildResumoComprasReceiptBytes(r, data){
+function buildResumoComprasReceiptBytes(r, dataCompra, dataVenda){
   let b = [];
   const add = arr => { b = b.concat(arr); };
   add(escposInit());
@@ -3745,14 +3781,15 @@ function buildResumoComprasReceiptBytes(r, data){
   add(escposLine('TANAKA - BOX 268'));
   add(escposSize(0,0)); add(escposBold(false));
   add(escposLine('CEAGESP - Sorocaba'));
-  add(escposLine('Resumo de compras - ' + fmtDate(data)));
+  add(escposLine('Compra ' + fmtDate(dataCompra) + ' / Venda ' + fmtDate(dataVenda)));
   add(escposAlign(0));
   add(escposLine('-'.repeat(32)));
   if(r.lista.length===0){
     add(escposLine('Nenhuma compra registrada nesse dia.'));
   }else{
     r.lista.forEach(p=>{
-      add(escposLine(padLine(`${p.qtd}${abbrevUnidade(p.unidade)} ${p.produtoNome}`, '')));
+      add(escposLine(`${p.produtoNome}`));
+      add(escposLine(`  Comp:${p.qtd} Vend:${p.vendido} Resta:${p.restante}${abbrevUnidade(p.unidade)}`));
     });
     add(escposLine('-'.repeat(32)));
     add(escposBold(true)); add(escposSize(1,0));
@@ -3763,15 +3800,15 @@ function buildResumoComprasReceiptBytes(r, data){
   add(escposCut());
   return b;
 }
-async function imprimirResumoCompras(data){
-  const r = calcularResumoComprasDia(data);
+async function imprimirResumoCompras(dataCompra, dataVenda){
+  const r = calcularResumoComprasComVendas(dataCompra, dataVenda);
   if(!btConnected){
     showToast('Nenhuma impressora conectada. Toque em "Selecionar/Reconectar impressora" no topo da lista de pedidos.');
     return;
   }
   try{
     showToast('Enviando para a impressora...');
-    await sendBytesToPrinter(buildResumoComprasReceiptBytes(r, data));
+    await sendBytesToPrinter(buildResumoComprasReceiptBytes(r, dataCompra, dataVenda));
     showToast('Impresso!');
   }catch(e){
     console.error(e);
@@ -3780,13 +3817,23 @@ async function imprimirResumoCompras(data){
 }
 function bindResumoComprasDiaModal(){
   document.getElementById('cancel-modal').addEventListener('click', closeModal);
+  function atualizar(){
+    document.getElementById('resumo-compras-conteudo').innerHTML = resumoComprasConteudoHTML(calcularResumoComprasComVendas(resumoComprasData, resumoVendaData));
+  }
   const dataInput = document.getElementById('resumo-compras-data-input');
   dataInput.addEventListener('change', ()=>{
     resumoComprasData = dataInput.value;
-    document.getElementById('resumo-compras-conteudo').innerHTML = resumoComprasConteudoHTML(calcularResumoComprasDia(resumoComprasData));
+    resumoVendaData = addDiasISO(resumoComprasData, 1);
+    document.getElementById('resumo-venda-data-input').value = resumoVendaData;
+    atualizar();
+  });
+  const vendaInput = document.getElementById('resumo-venda-data-input');
+  vendaInput.addEventListener('change', ()=>{
+    resumoVendaData = vendaInput.value;
+    atualizar();
   });
   document.getElementById('imprimir-resumo-compras-btn').addEventListener('click', ()=>{
-    imprimirResumoCompras(resumoComprasData);
+    imprimirResumoCompras(resumoComprasData, resumoVendaData);
   });
 }
 
