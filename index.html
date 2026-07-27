@@ -3788,7 +3788,11 @@ function buildResumoComprasReceiptBytes(r, dataCompra, dataVenda){
     add(escposLine('Nenhuma compra registrada nesse dia.'));
   }else{
     r.lista.forEach(p=>{
-      add(escposLine(`${p.qtd}${abbrevUnidade(p.unidade)} ${p.produtoNome}`));
+      add(escposBold(true)); add(escposSize(1,0));
+      add(escposLine(p.produtoNome));
+      add(escposSize(0,0)); add(escposBold(false));
+      add(escposLine(`${p.qtd}${abbrevUnidade(p.unidade)}`));
+      add(escposLine(''));
     });
   }
   add(escposFeed(3));
@@ -4855,4 +4859,4 @@ async function startAppAfterAuth(){
 </body>
 </html>
 
-  
+                                                     
