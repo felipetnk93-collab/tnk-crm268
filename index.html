@@ -525,6 +525,7 @@ let orders = [];
 let fornecedores = [];
 let compras = [];
 let caixas = [];
+let pagamentos = [];
 let activeTab = 'clientes';
 let dataReady = false;
 
@@ -1042,9 +1043,9 @@ async function saveDeletePassword(pw){
 
 async function loadAll(){
   try{
-    const [c,p,o,f,cp,cx] = await Promise.all([
+    const [c,p,o,f,cp,cx,pg] = await Promise.all([
       safeGet('ceasa_clients'), safeGet('ceasa_products'), safeGet('ceasa_orders'),
-      safeGet('ceasa_fornecedores'), safeGet('ceasa_compras'), safeGet('ceasa_caixas')
+      safeGet('ceasa_fornecedores'), safeGet('ceasa_compras'), safeGet('ceasa_caixas'), safeGet('ceasa_pagamentos')
     ]);
     clients = c || [];
     products = p || [];
@@ -1052,11 +1053,12 @@ async function loadAll(){
     fornecedores = f || [];
     compras = cp || [];
     caixas = cx || [];
+    pagamentos = pg || [];
     migrateOrdersIfNeeded();
     migrateComprasIfNeeded();
   }catch(e){
     console.error('Erro ao carregar dados', e);
-    clients = []; products = []; orders = []; fornecedores = []; compras = []; caixas = [];
+    clients = []; products = []; orders = []; fornecedores = []; compras = []; caixas = []; pagamentos = [];
   }
   dataReady = true;
   updateSyncStatus();
@@ -1124,6 +1126,7 @@ async function saveOrders(){ const r = await safeSet('ceasa_orders', orders); sc
 async function saveFornecedores(){ const r = await safeSet('ceasa_fornecedores', fornecedores); scheduleCloudPush(); return r; }
 async function saveCompras(){ const r = await safeSet('ceasa_compras', compras); scheduleCloudPush(); return r; }
 async function saveCaixas(){ const r = await safeSet('ceasa_caixas', caixas); scheduleCloudPush(); return r; }
+async function savePagamentos(){ const r = await safeSet('ceasa_pagamentos', pagamentos); scheduleCloudPush(); return r; }
 
 let ordersSaveTimer = null;
 function scheduleSaveOrders(){
@@ -1316,11 +1319,11 @@ function scheduleCloudPush(){
   clearTimeout(cloudPushTimer);
   cloudPushTimer = setTimeout(()=>{ pushToCloud(); }, 1500);
 }
-let tombstones = { clients:[], products:[], orders:[], fornecedores:[], compras:[], caixas:[] };
+let tombstones = { clients:[], products:[], orders:[], fornecedores:[], compras:[], caixas:[], pagamentos:[] };
 async function loadTombstones(){
   try{
     const t = await safeGet('ceasa_tombstones');
-    if(t) tombstones = Object.assign({ clients:[], products:[], orders:[], fornecedores:[], compras:[], caixas:[] }, t);
+    if(t) tombstones = Object.assign({ clients:[], products:[], orders:[], fornecedores:[], compras:[], caixas:[], pagamentos:[] }, t);
   }catch(e){ /* sem tombstones salvos ainda */ }
 }
 async function saveTombstones(){
@@ -1388,6 +1391,7 @@ async function pushToCloud(){
       tombstones.fornecedores = mesclarTombstones(tombstones.fornecedores, remoteTombstones.fornecedores);
       tombstones.compras = mesclarTombstones(tombstones.compras, remoteTombstones.compras);
       tombstones.caixas = mesclarTombstones(tombstones.caixas, remoteTombstones.caixas);
+      tombstones.pagamentos = mesclarTombstones(tombstones.pagamentos, remoteTombstones.pagamentos);
 
       clients = mesclarColecoes(clients, remoto.clients, tombstones.clients);
       products = mesclarColecoes(products, remoto.products, tombstones.products);
@@ -1395,18 +1399,20 @@ async function pushToCloud(){
       fornecedores = mesclarColecoes(fornecedores, remoto.fornecedores, tombstones.fornecedores);
       compras = mesclarColecoes(compras, remoto.compras, tombstones.compras);
       caixas = mesclarColecoes(caixas, remoto.caixas, tombstones.caixas);
+      pagamentos = mesclarColecoes(pagamentos, remoto.pagamentos, tombstones.pagamentos);
       migrateOrdersIfNeeded();
       migrateComprasIfNeeded();
       await Promise.all([
         safeSet('ceasa_clients', clients), safeSet('ceasa_products', products), safeSet('ceasa_orders', orders),
-        safeSet('ceasa_fornecedores', fornecedores), safeSet('ceasa_compras', compras), safeSet('ceasa_caixas', caixas)
+        safeSet('ceasa_fornecedores', fornecedores), safeSet('ceasa_compras', compras), safeSet('ceasa_caixas', caixas),
+        safeSet('ceasa_pagamentos', pagamentos)
       ]);
       await saveTombstones();
       render();
     }
 
     const ts = Date.now();
-    const payload = { clients, products, orders, fornecedores, compras, caixas, tombstones, updatedAt: ts };
+    const payload = { clients, products, orders, fornecedores, compras, caixas, pagamentos, tombstones, updatedAt: ts };
     const res = await fetch(cleanSyncUrl(syncUrl) + '/data.json' + authParam, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -1448,8 +1454,9 @@ async function pullFromCloud(force){
         const remoteFornecedores = remote.fornecedores || [];
         const remoteCompras = remote.compras || [];
         const remoteCaixas = remote.caixas || [];
-        const localSnapshot = JSON.stringify({clients, products, orders, fornecedores, compras, caixas});
-        const remoteSnapshot = JSON.stringify({clients: remoteClients, products: remoteProducts, orders: remoteOrders, fornecedores: remoteFornecedores, compras: remoteCompras, caixas: remoteCaixas});
+        const remotePagamentos = remote.pagamentos || [];
+        const localSnapshot = JSON.stringify({clients, products, orders, fornecedores, compras, caixas, pagamentos});
+        const remoteSnapshot = JSON.stringify({clients: remoteClients, products: remoteProducts, orders: remoteOrders, fornecedores: remoteFornecedores, compras: remoteCompras, caixas: remoteCaixas, pagamentos: remotePagamentos});
         const isDifferent = localSnapshot !== remoteSnapshot;
         if(force || isDifferent){
           const remoteTombstones = remote.tombstones || {};
@@ -1459,6 +1466,7 @@ async function pullFromCloud(force){
           tombstones.fornecedores = mesclarTombstones(tombstones.fornecedores, remoteTombstones.fornecedores);
           tombstones.compras = mesclarTombstones(tombstones.compras, remoteTombstones.compras);
           tombstones.caixas = mesclarTombstones(tombstones.caixas, remoteTombstones.caixas);
+          tombstones.pagamentos = mesclarTombstones(tombstones.pagamentos, remoteTombstones.pagamentos);
 
           clients = mesclarColecoes(clients, remoteClients, tombstones.clients);
           products = mesclarColecoes(products, remoteProducts, tombstones.products);
@@ -1466,11 +1474,13 @@ async function pullFromCloud(force){
           fornecedores = mesclarColecoes(fornecedores, remoteFornecedores, tombstones.fornecedores);
           compras = mesclarColecoes(compras, remoteCompras, tombstones.compras);
           caixas = mesclarColecoes(caixas, remoteCaixas, tombstones.caixas);
+          pagamentos = mesclarColecoes(pagamentos, remotePagamentos, tombstones.pagamentos);
           migrateOrdersIfNeeded();
           migrateComprasIfNeeded();
                 await Promise.all([
             safeSet('ceasa_clients', clients), safeSet('ceasa_products', products), safeSet('ceasa_orders', orders),
-            safeSet('ceasa_fornecedores', fornecedores), safeSet('ceasa_compras', compras), safeSet('ceasa_caixas', caixas)
+            safeSet('ceasa_fornecedores', fornecedores), safeSet('ceasa_compras', compras), safeSet('ceasa_caixas', caixas),
+            safeSet('ceasa_pagamentos', pagamentos)
           ]);
           await saveTombstones();
           await saveSyncTimestamp(remote.updatedAt);
@@ -1542,6 +1552,7 @@ const keyGetters = {
   ceasa_fornecedores: ()=>fornecedores,
   ceasa_compras: ()=>compras,
   ceasa_caixas: ()=>caixas,
+  ceasa_pagamentos: ()=>pagamentos,
 };
 
 function safeSet(key, value){
@@ -3524,9 +3535,15 @@ function pagamentoClienteModalHTML(cliente){
       <span class="lbl">Total pendente</span>
       <span class="val">${fmtMoney(totalPendente)}</span>
     </div>
-    <div class="field">
-      <label>Valor pago agora (R$)</label>
-      <input type="number" min="0.01" step="0.01" id="valor-pagamento-input" placeholder="0,00" onfocus="this.select()">
+    <div class="row2">
+      <div class="field">
+        <label>Valor pago agora (R$)</label>
+        <input type="number" min="0.01" step="0.01" id="valor-pagamento-input" placeholder="0,00" onfocus="this.select()">
+      </div>
+      <div class="field">
+        <label>Data do pagamento</label>
+        <input type="date" id="data-pagamento-input" value="${todayISO()}">
+      </div>
     </div>
     <p style="font-size:11.5px;color:var(--wood-light);line-height:1.5;">
       O valor é aplicado nos ${pedidosPendentes.length} pedido(s) em aberto, começando pelo mais antigo. Se não quitar tudo, o restante fica marcado como pagamento parcial.
@@ -3535,12 +3552,18 @@ function pagamentoClienteModalHTML(cliente){
       <button type="button" class="btn ghost" id="cancel-modal">Cancelar</button>
       <button type="button" class="btn primary" id="confirmar-pagamento-btn">Registrar</button>
     </div>
+    <button type="button" class="link-btn" id="ver-historico-pagamentos-btn" style="margin-top:12px;display:block;">Ver histórico de pagamentos</button>
   `;
 }
 function bindPagamentoClienteModal(cliente){
   document.getElementById('cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('ver-historico-pagamentos-btn').addEventListener('click', ()=>{
+    openModal(historicoPagamentosModalHTML(cliente));
+    bindHistoricoPagamentosModal(cliente);
+  });
   document.getElementById('confirmar-pagamento-btn').addEventListener('click', async ()=>{
     const valor = parseFloat(document.getElementById('valor-pagamento-input').value);
+    const dataPagamento = document.getElementById('data-pagamento-input').value || todayISO();
     if(!valor || valor<=0){ showToast('Digite um valor válido.'); return; }
     const pendentes = orders.filter(o=>o.clienteId===cliente.id && o.statusPagamento!=='pago')
       .sort((a,b)=>a.data.localeCompare(b.data)||a.criadoEm-b.criadoEm);
@@ -3564,6 +3587,8 @@ function bindPagamentoClienteModal(cliente){
       o.atualizadoEm = Date.now();
     }
     await saveOrders();
+    pagamentos.push({ id: uid(), clienteId: cliente.id, valor, data: dataPagamento, criadoEm: Date.now(), atualizadoEm: Date.now() });
+    await savePagamentos();
     closeModal();
     if(restante>0.001){
       showToast(`Pagamento registrado. Sobraram ${fmtMoney(restante)} sem pedido pendente pra aplicar.`, 5000);
@@ -3572,6 +3597,27 @@ function bindPagamentoClienteModal(cliente){
     }
     render();
   });
+}
+function historicoPagamentosModalHTML(cliente){
+  const pagamentosCliente = pagamentos.filter(p=>p.clienteId===cliente.id)
+    .sort((a,b)=>b.data.localeCompare(a.data)||b.criadoEm-a.criadoEm);
+  return `
+    <h3>Histórico de pagamentos</h3>
+    <p style="font-size:13px;color:var(--wood-light);margin-bottom:10px;">${escapeHtml(cliente.nome)}</p>
+    ${pagamentosCliente.length===0 ? `<p style="text-align:center;color:var(--wood-light);padding:20px 0;">Nenhum pagamento registrado ainda.</p>` : `
+      <div class="fechamento-resumo">
+        ${pagamentosCliente.map(p=>`<div class="fechamento-linha"><span>${fmtDate(p.data)}</span><span>${fmtMoney(p.valor)}</span></div>`).join('')}
+        <div class="fechamento-sep"></div>
+        <div class="fechamento-linha destaque"><span>Total pago (histórico)</span><span>${fmtMoney(pagamentosCliente.reduce((s,p)=>s+p.valor,0))}</span></div>
+      </div>
+    `}
+    <div class="modal-actions" style="margin-top:14px;">
+      <button type="button" class="btn ghost" id="cancel-modal" style="flex:1;">Fechar</button>
+    </div>
+  `;
+}
+function bindHistoricoPagamentosModal(){
+  document.getElementById('cancel-modal').addEventListener('click', closeModal);
 }
 
 function pagamentoFornecedorModalHTML(fornecedor){
@@ -4700,7 +4746,7 @@ document.getElementById('export-btn').addEventListener('click', ()=>{
     const payload = {
       app: 'tnk-p268',
       exportadoEm: new Date().toISOString(),
-      clients, products, orders, fornecedores, compras
+      clients, products, orders, fornecedores, compras, caixas, pagamentos
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
     const url = URL.createObjectURL(blob);
@@ -4732,6 +4778,8 @@ document.getElementById('import-input').addEventListener('change', (e)=>{
       }
       const parsedFornecedores = Array.isArray(parsed.fornecedores) ? parsed.fornecedores : [];
       const parsedCompras = Array.isArray(parsed.compras) ? parsed.compras : [];
+      const parsedCaixas = Array.isArray(parsed.caixas) ? parsed.caixas : [];
+      const parsedPagamentos = Array.isArray(parsed.pagamentos) ? parsed.pagamentos : [];
       const substituir = confirm(
         `Este arquivo tem ${parsed.clients.length} cliente(s), ${parsed.products.length} produto(s), ${parsed.orders.length} pedido(s), ${parsedFornecedores.length} fornecedor(es) e ${parsedCompras.length} compra(s).\n\nOK = substituir todos os dados atuais\nCancelar = juntar com os dados atuais (sem duplicar)`
       );
@@ -4741,21 +4789,27 @@ document.getElementById('import-input').addEventListener('change', (e)=>{
         orders = parsed.orders;
         fornecedores = parsedFornecedores;
         compras = parsedCompras;
+        caixas = parsedCaixas;
+        pagamentos = parsedPagamentos;
       }else{
         const existingClientIds = new Set(clients.map(c=>c.id));
         const existingProductIds = new Set(products.map(p=>p.id));
         const existingOrderIds = new Set(orders.map(o=>o.id));
         const existingFornecedorIds = new Set(fornecedores.map(f=>f.id));
         const existingCompraIds = new Set(compras.map(c=>c.id));
+        const existingCaixaIds = new Set(caixas.map(c=>c.id));
+        const existingPagamentoIds = new Set(pagamentos.map(p=>p.id));
         clients = clients.concat(parsed.clients.filter(c=>!existingClientIds.has(c.id)));
         products = products.concat(parsed.products.filter(p=>!existingProductIds.has(p.id)));
         orders = orders.concat(parsed.orders.filter(o=>!existingOrderIds.has(o.id)));
         fornecedores = fornecedores.concat(parsedFornecedores.filter(f=>!existingFornecedorIds.has(f.id)));
         compras = compras.concat(parsedCompras.filter(c=>!existingCompraIds.has(c.id)));
+        caixas = caixas.concat(parsedCaixas.filter(c=>!existingCaixaIds.has(c.id)));
+        pagamentos = pagamentos.concat(parsedPagamentos.filter(p=>!existingPagamentoIds.has(p.id)));
       }
       migrateOrdersIfNeeded();
       migrateComprasIfNeeded();
-        await Promise.all([saveClients(), saveProducts(), saveOrders(), saveFornecedores(), saveCompras()]);
+        await Promise.all([saveClients(), saveProducts(), saveOrders(), saveFornecedores(), saveCompras(), saveCaixas(), savePagamentos()]);
       showToast('Dados importados com sucesso.');
       render();
     }catch(err){
@@ -4859,4 +4913,3 @@ async function startAppAfterAuth(){
 </body>
 </html>
 
-                                                     
