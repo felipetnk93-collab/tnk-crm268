@@ -3598,12 +3598,31 @@ function bindPagamentoClienteModal(cliente){
     render();
   });
 }
+function extratoPagamentoTextoWhatsapp(cliente){
+  const pagamentosCliente = pagamentos.filter(p=>p.clienteId===cliente.id)
+    .sort((a,b)=>a.data.localeCompare(b.data)||a.criadoEm-b.criadoEm);
+  const totalPendente = clienteTotalPendente(cliente.id);
+  let txt = `*Tanaka - Box 268*\n`;
+  txt += `Extrato - ${cliente.nome}\n\n`;
+  if(pagamentosCliente.length>0){
+    txt += `Pagamentos:\n`;
+    txt += pagamentosCliente.map(p=>`${fmtDate(p.data)}: ${fmtMoney(p.valor)}`).join('\n');
+    txt += `\n\n`;
+  }
+  txt += `*Saldo pendente: ${fmtMoney(totalPendente)}*`;
+  return txt;
+}
 function historicoPagamentosModalHTML(cliente){
   const pagamentosCliente = pagamentos.filter(p=>p.clienteId===cliente.id)
     .sort((a,b)=>b.data.localeCompare(a.data)||b.criadoEm-a.criadoEm);
+  const totalPendente = clienteTotalPendente(cliente.id);
   return `
     <h3>Histórico de pagamentos</h3>
-    <p style="font-size:13px;color:var(--wood-light);margin-bottom:10px;">${escapeHtml(cliente.nome)}</p>
+    <p style="font-size:13px;color:var(--wood-light);margin-bottom:4px;">${escapeHtml(cliente.nome)}</p>
+    <div class="order-total" style="margin-top:0;margin-bottom:10px;">
+      <span class="lbl">Saldo pendente</span>
+      <span class="val">${fmtMoney(totalPendente)}</span>
+    </div>
     ${pagamentosCliente.length===0 ? `<p style="text-align:center;color:var(--wood-light);padding:20px 0;">Nenhum pagamento registrado ainda.</p>` : `
       <div class="fechamento-resumo">
         ${pagamentosCliente.map(p=>`<div class="fechamento-linha"><span>${fmtDate(p.data)}</span><span>${fmtMoney(p.valor)}</span></div>`).join('')}
@@ -3613,11 +3632,33 @@ function historicoPagamentosModalHTML(cliente){
     `}
     <div class="modal-actions" style="margin-top:14px;">
       <button type="button" class="btn ghost" id="cancel-modal" style="flex:1;">Fechar</button>
+      <button type="button" class="btn primary" id="copiar-extrato-whatsapp-btn" style="flex:1;">${ICON.copy} Copiar p/ WhatsApp</button>
     </div>
   `;
 }
-function bindHistoricoPagamentosModal(){
+function bindHistoricoPagamentosModal(cliente){
   document.getElementById('cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('copiar-extrato-whatsapp-btn').addEventListener('click', async ()=>{
+    const texto = extratoPagamentoTextoWhatsapp(cliente);
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        await navigator.clipboard.writeText(texto);
+      }else{
+        const ta = document.createElement('textarea');
+        ta.value = texto;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      showToast('Copiado! Agora é só colar no WhatsApp.');
+    }catch(e){
+      console.error(e);
+      showToast('Não consegui copiar. Tente novamente.');
+    }
+  });
 }
 
 function pagamentoFornecedorModalHTML(fornecedor){
