@@ -2775,7 +2775,7 @@ function pedidoTextoWhatsapp(o){
   ).join('\n');
   const fp = formaPagamentoInfo(o.formaPagamento);
   const statusTxt = o.statusPagamento==='pago' ? 'Pago' : (o.statusPagamento==='parcial' ? `Parcial (falta ${fmtMoney(orderTotal(o)-(o.valorPago||0))})` : 'Pendente');
-  let txt = `Boa tarde\n\n`;
+  let txt = `Olá\n\n`;
   txt += `Quando puder, dá uma conferida se está tudo certo. Qualquer coisa é só me avisar.\n\n`;
   txt += `Obrigado\n\n`;
   txt += `*Tanaka - Box 268*\n`;
