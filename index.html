@@ -560,11 +560,75 @@ function startDropdownAutoScroll(listEl){
 function closeProductDropdown(){
   const existing = document.getElementById('product-dropdown-panel');
   if(existing) existing.remove();
+  const existingClient = document.getElementById('client-dropdown-panel');
+  if(existingClient) existingClient.remove();
   stopDropdownAutoScroll();
   if(dropdownOutsideHandler){
     document.removeEventListener('mousedown', dropdownOutsideHandler);
     dropdownOutsideHandler = null;
   }
+}
+function closeClientDropdown(){ closeProductDropdown(); }
+function openClientDropdown(anchorEl, currentClienteId, onSelect){
+  closeProductDropdown();
+  const rect = anchorEl.getBoundingClientRect();
+  const panel = document.createElement('div');
+  panel.id = 'client-dropdown-panel';
+  panel.className = 'product-dropdown-panel';
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const openUp = spaceBelow < 260;
+  panel.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)) + 'px';
+  panel.style.width = rect.width + 'px';
+  if(openUp){
+    panel.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+  }else{
+    panel.style.top = (rect.bottom + 4) + 'px';
+  }
+  panel.innerHTML = `
+    <input type="text" class="product-dropdown-search" placeholder="Buscar cliente...">
+    <div class="product-dropdown-list"></div>
+  `;
+  document.body.appendChild(panel);
+
+  const searchInput = panel.querySelector('.product-dropdown-search');
+  const listEl = panel.querySelector('.product-dropdown-list');
+
+  function renderList(filterText){
+    const norm = normalizeSearch(filterText);
+    const filtered = sortByName(clients).filter(c=>normalizeSearch(c.nome).includes(norm));
+    listEl.innerHTML = filtered.length ? filtered.map(c=>`
+      <div class="product-dropdown-item ${c.id===currentClienteId?'selected':''}" data-cid="${c.id}">${escapeHtml(c.nome)}</div>
+    `).join('') : `<div class="product-dropdown-empty">Nenhum cliente encontrado</div>`;
+  }
+  renderList('');
+
+  searchInput.addEventListener('input', ()=> renderList(searchInput.value));
+  listEl.addEventListener('mousedown', (e)=>{
+    const item = e.target.closest('.product-dropdown-item');
+    if(!item) return;
+    e.preventDefault();
+    onSelect(item.dataset.cid);
+    closeClientDropdown();
+  });
+  listEl.addEventListener('mousemove', (e)=>{
+    const bounds = listEl.getBoundingClientRect();
+    const y = e.clientY - bounds.top;
+    const edge = 34;
+    if(y < edge) dropdownScrollSpeed = -((edge - y) / 4 + 1);
+    else if(y > bounds.height - edge) dropdownScrollSpeed = (y - (bounds.height - edge)) / 4 + 1;
+    else dropdownScrollSpeed = 0;
+  });
+  listEl.addEventListener('mouseleave', ()=>{ dropdownScrollSpeed = 0; });
+  startDropdownAutoScroll(listEl);
+
+  searchInput.focus();
+
+  dropdownOutsideHandler = (e)=>{
+    if(!panel.contains(e.target) && e.target !== anchorEl){
+      closeClientDropdown();
+    }
+  };
+  setTimeout(()=>{ document.addEventListener('mousedown', dropdownOutsideHandler); }, 0);
 }
 function normalizeSearch(s){
   return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -3003,10 +3067,10 @@ function pedidoFormHTML(o, prefill){
     <form id="pedido-form">
       <div class="row2">
         <div class="field"><label>Cliente</label>
-          <select required id="f-cliente">
-            <option value="">Selecione...</option>
-            ${sortByName(clients).map(c=>`<option value="${c.id}" ${o.clienteId===c.id?'selected':''}>${escapeHtml(c.nome)}</option>`).join('')}
-          </select>
+          <input type="hidden" required id="f-cliente" value="${o.clienteId||''}">
+          <button type="button" class="product-select-btn ${!o.clienteId?'placeholder':''}" id="f-cliente-btn" style="width:100%;">
+            ${o.clienteId ? escapeHtml((clients.find(c=>c.id===o.clienteId)||{}).nome||'') : 'Selecione o cliente...'}
+          </button>
         </div>
         <div class="field"><label>Data</label><input required type="date" id="f-data" value="${o.data}"></div>
       </div>
@@ -4426,6 +4490,18 @@ function bindPedidoForm(existing){
     statusPagSel.classList.toggle('pago', statusPagSel.value==='pago');
     statusPagSel.classList.toggle('parcial', statusPagSel.value==='parcial');
     statusPagSel.classList.toggle('pendente', statusPagSel.value==='pendente');
+  });
+
+  const clienteBtn = document.getElementById('f-cliente-btn');
+  if(clienteBtn) clienteBtn.addEventListener('click', ()=>{
+    closeProductDropdown();
+    const inputEl = document.getElementById('f-cliente');
+    openClientDropdown(clienteBtn, inputEl.value, (selectedId)=>{
+      inputEl.value = selectedId;
+      const c = clients.find(cc=>cc.id===selectedId);
+      clienteBtn.textContent = c ? c.nome : 'Selecione o cliente...';
+      clienteBtn.classList.toggle('placeholder', !c);
+    });
   });
 
   function rebindItemRows(){
