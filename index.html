@@ -356,6 +356,7 @@
   }
   .product-dropdown-item:hover{background:var(--paper-2);}
   .product-dropdown-item.selected{background:#DCE8D3;color:var(--sage);font-weight:600;}
+  .product-dropdown-item.highlighted{background:var(--tomato);color:#fff;}
   .product-dropdown-empty{padding:12px;font-size:12.5px;color:var(--wood-light);text-align:center;}
   .remove-item{background:none;border:none;color:var(--tomato);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
   .remove-item svg{width:16px;height:16px;}
@@ -592,17 +593,49 @@ function openClientDropdown(anchorEl, currentClienteId, onSelect){
 
   const searchInput = panel.querySelector('.product-dropdown-search');
   const listEl = panel.querySelector('.product-dropdown-list');
+  let highlightedIndex = -1;
 
+  function updateHighlight(){
+    const items = listEl.querySelectorAll('.product-dropdown-item');
+    items.forEach((item,idx)=> item.classList.toggle('highlighted', idx===highlightedIndex));
+    if(highlightedIndex>=0 && items[highlightedIndex]){
+      if(typeof items[highlightedIndex].scrollIntoView === 'function'){ items[highlightedIndex].scrollIntoView({ block:'nearest' }); }
+    }
+  }
   function renderList(filterText){
     const norm = normalizeSearch(filterText);
     const filtered = sortByName(clients).filter(c=>normalizeSearch(c.nome).includes(norm));
     listEl.innerHTML = filtered.length ? filtered.map(c=>`
       <div class="product-dropdown-item ${c.id===currentClienteId?'selected':''}" data-cid="${c.id}">${escapeHtml(c.nome)}</div>
     `).join('') : `<div class="product-dropdown-empty">Nenhum cliente encontrado</div>`;
+    highlightedIndex = filtered.length>0 ? 0 : -1;
+    updateHighlight();
   }
   renderList('');
 
   searchInput.addEventListener('input', ()=> renderList(searchInput.value));
+  searchInput.addEventListener('keydown', (e)=>{
+    const items = listEl.querySelectorAll('.product-dropdown-item');
+    if(e.key==='ArrowDown'){
+      e.preventDefault();
+      if(items.length===0) return;
+      highlightedIndex = Math.min(highlightedIndex+1, items.length-1);
+      updateHighlight();
+    }else if(e.key==='ArrowUp'){
+      e.preventDefault();
+      if(items.length===0) return;
+      highlightedIndex = Math.max(highlightedIndex-1, 0);
+      updateHighlight();
+    }else if(e.key==='Enter'){
+      e.preventDefault();
+      if(highlightedIndex>=0 && items[highlightedIndex]){
+        onSelect(items[highlightedIndex].dataset.cid);
+        closeClientDropdown();
+      }
+    }else if(e.key==='Escape'){
+      closeClientDropdown();
+    }
+  });
   listEl.addEventListener('mousedown', (e)=>{
     const item = e.target.closest('.product-dropdown-item');
     if(!item) return;
@@ -1034,7 +1067,15 @@ function openProductDropdown(anchorEl, currentProdutoId, labelFn, onSelect, unid
 
   const searchInput = panel.querySelector('.product-dropdown-search');
   const listEl = panel.querySelector('.product-dropdown-list');
+  let highlightedIndex = -1;
 
+  function updateHighlight(){
+    const items = listEl.querySelectorAll('.product-dropdown-item');
+    items.forEach((item,idx)=> item.classList.toggle('highlighted', idx===highlightedIndex));
+    if(highlightedIndex>=0 && items[highlightedIndex]){
+      if(typeof items[highlightedIndex].scrollIntoView === 'function'){ items[highlightedIndex].scrollIntoView({ block:'nearest' }); }
+    }
+  }
   function renderList(filterText){
     const norm = normalizeSearch(filterText);
     const base = unidadeFiltro ? products.filter(p=>p.unidade===unidadeFiltro) : products;
@@ -1042,10 +1083,34 @@ function openProductDropdown(anchorEl, currentProdutoId, labelFn, onSelect, unid
     listEl.innerHTML = filtered.length ? filtered.map(p=>`
       <div class="product-dropdown-item ${p.id===currentProdutoId?'selected':''}" data-pid="${p.id}">${escapeHtml(labelFn(p))}</div>
     `).join('') : `<div class="product-dropdown-empty">${unidadeFiltro ? 'Nenhum produto em '+abbrevUnidade(unidadeFiltro) : 'Nenhum produto encontrado'}</div>`;
+    highlightedIndex = filtered.length>0 ? 0 : -1;
+    updateHighlight();
   }
   renderList('');
 
   searchInput.addEventListener('input', ()=> renderList(searchInput.value));
+  searchInput.addEventListener('keydown', (e)=>{
+    const items = listEl.querySelectorAll('.product-dropdown-item');
+    if(e.key==='ArrowDown'){
+      e.preventDefault();
+      if(items.length===0) return;
+      highlightedIndex = Math.min(highlightedIndex+1, items.length-1);
+      updateHighlight();
+    }else if(e.key==='ArrowUp'){
+      e.preventDefault();
+      if(items.length===0) return;
+      highlightedIndex = Math.max(highlightedIndex-1, 0);
+      updateHighlight();
+    }else if(e.key==='Enter'){
+      e.preventDefault();
+      if(highlightedIndex>=0 && items[highlightedIndex]){
+        onSelect(items[highlightedIndex].dataset.pid);
+        closeProductDropdown();
+      }
+    }else if(e.key==='Escape'){
+      closeProductDropdown();
+    }
+  });
   listEl.addEventListener('mousedown', (e)=>{
     const item = e.target.closest('.product-dropdown-item');
     if(!item) return;
