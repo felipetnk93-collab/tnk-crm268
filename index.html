@@ -217,6 +217,8 @@
   .order-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
   .order-card-top .name{font-weight:700;color:var(--chalk);font-size:15px;}
   .order-card-top .date-tag{font-weight:400;color:var(--wood-light);font-size:12px;}
+  .clickable-name{cursor:pointer;}
+  .clickable-name:hover{color:var(--tomato);text-decoration:underline;}
   .order-items-checklist{display:flex;flex-direction:column;gap:2px;}
   .check-row{
     display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:7px;
@@ -2142,7 +2144,7 @@ function orderCardHTML(o){
   return `
     <div class="item-card order-card ${aguardandoRetirada?'aguardando-retirada':''}">
       <div class="order-card-top">
-        <div class="name">${cliente ? escapeHtml(cliente.nome) : '(cliente removido)'} <span class="date-tag">· ${fmtDate(o.data)}</span></div>
+        <div class="name">${cliente ? `<span class="clickable-name" data-filter-cliente-pedido="${cliente.id}">${escapeHtml(cliente.nome)}</span>` : '(cliente removido)'} <span class="date-tag">· ${fmtDate(o.data)}</span></div>
         <div class="actions-row">
           <button class="icon-btn" data-print-pedido="${o.id}">${ICON.print}</button>
           <button class="icon-btn" data-copy-pedido="${o.id}">${ICON.copy}</button>
@@ -2271,7 +2273,7 @@ function compraCardHTML(c){
     <div class="item-card order-card">
       <div class="order-card-top">
         <div class="name">
-          ${temPendente ? '<span title="Tem item com preço pendente">⚠️</span> ' : ''}${fornecedor ? escapeHtml(fornecedor.nome) : '(fornecedor removido)'} <span class="date-tag">· ${fmtDate(c.data)}</span>
+          ${temPendente ? '<span title="Tem item com preço pendente">⚠️</span> ' : ''}${fornecedor ? `<span class="clickable-name" data-filter-fornecedor-compra="${fornecedor.id}">${escapeHtml(fornecedor.nome)}</span>` : '(fornecedor removido)'} <span class="date-tag">· ${fmtDate(c.data)}</span>
         </div>
         <div class="actions-row">
           <button class="icon-btn" data-print-compra="${c.id}">${ICON.print}</button>
@@ -3360,6 +3362,10 @@ function attachContentEvents(){
     document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab==='compras'));
     render();
   }));
+  document.querySelectorAll('[data-filter-fornecedor-compra]').forEach(el=>el.addEventListener('click', ()=>{
+    compraFornecedorFilterId = el.dataset.filterFornecedorCompra;
+    render();
+  }));
 
   // CAIXAS EMPRESTADAS
   const addCaixa = document.getElementById('add-caixa-btn');
@@ -3424,6 +3430,11 @@ function attachContentEvents(){
   if(fechamentoDiaBtn) fechamentoDiaBtn.addEventListener('click', ()=>{ openModal(fechamentoDiaModalHTML()); bindFechamentoDiaModal(); });
   const fotoCadernoBtn = document.getElementById('foto-caderno-btn');
   if(fotoCadernoBtn) fotoCadernoBtn.addEventListener('click', ()=>{ openModal(fotoCadernoModalHTML()); bindFotoCadernoModal(); });
+  document.querySelectorAll('[data-filter-cliente-pedido]').forEach(el=>el.addEventListener('click', ()=>{
+    pedidoClienteFilterId = el.dataset.filterClientePedido;
+    pedidoFilter = 'todos';
+    render();
+  }));
   document.querySelectorAll('[data-edit-pedido]').forEach(b=>b.addEventListener('click', ()=>{
     const o = orders.find(x=>x.id===b.dataset.editPedido);
     openModal(pedidoFormHTML(o)); bindPedidoForm(o);
