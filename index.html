@@ -561,6 +561,7 @@ function closeProductDropdown(){
   stopDropdownAutoScroll();
   if(dropdownOutsideHandler){
     document.removeEventListener('mousedown', dropdownOutsideHandler);
+    document.removeEventListener('touchstart', dropdownOutsideHandler);
     dropdownOutsideHandler = null;
   }
 }
@@ -649,14 +650,17 @@ function openClientDropdown(anchorEl, currentClienteId, onSelect){
   listEl.addEventListener('mouseleave', ()=>{ dropdownScrollSpeed = 0; });
   startDropdownAutoScroll(listEl);
 
-  searchInput.focus();
+  setTimeout(()=>{ searchInput.focus(); }, 60);
 
   dropdownOutsideHandler = (e)=>{
     if(!panel.contains(e.target) && e.target !== anchorEl){
       closeClientDropdown();
     }
   };
-  setTimeout(()=>{ document.addEventListener('mousedown', dropdownOutsideHandler); }, 0);
+  setTimeout(()=>{
+    document.addEventListener('mousedown', dropdownOutsideHandler);
+    document.addEventListener('touchstart', dropdownOutsideHandler);
+  }, 150);
 }
 function normalizeSearch(s){
   return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -1124,14 +1128,17 @@ function openProductDropdown(anchorEl, currentProdutoId, labelFn, onSelect, unid
   listEl.addEventListener('mouseleave', ()=>{ dropdownScrollSpeed = 0; });
   startDropdownAutoScroll(listEl);
 
-  searchInput.focus();
+  setTimeout(()=>{ searchInput.focus(); }, 60);
 
   dropdownOutsideHandler = (e)=>{
     if(!panel.contains(e.target) && e.target !== anchorEl){
       closeProductDropdown();
     }
   };
-  setTimeout(()=>{ document.addEventListener('mousedown', dropdownOutsideHandler); }, 0);
+  setTimeout(()=>{
+    document.addEventListener('mousedown', dropdownOutsideHandler);
+    document.addEventListener('touchstart', dropdownOutsideHandler);
+  }, 150);
 }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function localDateISO(offsetDays=0){
