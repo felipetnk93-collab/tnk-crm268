@@ -387,13 +387,6 @@
   .coluna-config-item{display:flex;gap:6px;align-items:center;margin-bottom:8px;}
   .coluna-config-item input{flex:1;min-width:0;}
   .coluna-config-item select{flex:1;min-width:0;}
-  .atalhos-produtos{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
-  .atalhos-label{font-size:11px;color:var(--wood-light);margin-right:2px;}
-  .atalho-produto-btn{
-    font-family:'Inter';font-size:12px;color:var(--sage);background:#EAF1E4;border:1px solid #CFE0C4;
-    border-radius:16px;padding:5px 12px;cursor:pointer;
-  }
-  .atalho-produto-btn:hover{background:#DCE8D3;}
 
   .modal-actions{display:flex;gap:10px;margin-top:18px;}
   .modal-actions button{flex:1;justify-content:center;}
@@ -3095,20 +3088,6 @@ function produtoFormHTML(p){
 }
 
 let orderDraftItems = [];
-function produtosMaisVendidos(limit){
-  const contagem = {};
-  orders.forEach(o=>{
-    o.itens.forEach(it=>{
-      contagem[it.produtoId] = (contagem[it.produtoId]||0) + Number(it.qtd||0);
-    });
-  });
-  return Object.keys(contagem)
-    .map(id=>({produtoId:id, qtd:contagem[id]}))
-    .sort((a,b)=>b.qtd-a.qtd)
-    .slice(0, limit)
-    .map(x=>products.find(p=>p.id===x.produtoId))
-    .filter(Boolean);
-}
 function pedidoFormHTML(o, prefill){
   const isEdit = !!o;
   o = o || prefill || {clienteId:'', data: todayISO(), entregue:false, statusPagamento:'pendente', formaPagamento:'', itens:[]};
@@ -3142,12 +3121,6 @@ function pedidoFormHTML(o, prefill){
       <div class="field"><label>Itens do pedido</label>
         <div id="order-items-wrap">${orderDraftItems.map((it,idx)=>orderItemRowHTML(it,idx)).join('')}</div>
         <button type="button" class="btn ghost small" id="add-item-row" style="margin-top:4px;">${ICON.plus} Adicionar item</button>
-        ${produtosMaisVendidos(6).length ? `
-          <div class="atalhos-produtos">
-            <span class="atalhos-label">Mais vendidos:</span>
-            ${produtosMaisVendidos(6).map(p=>`<button type="button" class="atalho-produto-btn" data-atalho-produto="${p.id}">${escapeHtml(p.nome)}</button>`).join('')}
-          </div>
-        ` : ''}
       </div>
       <div class="order-total"><span class="lbl">Total</span><span class="val" id="order-total-display">${fmtMoney(0)}</span></div>
       <div class="field">
@@ -4635,18 +4608,6 @@ function bindPedidoForm(existing){
     rebindItemRows();
     recalcOrderTotal();
   });
-  document.querySelectorAll('[data-atalho-produto]').forEach(b=>b.addEventListener('click', ()=>{
-    closeProductDropdown();
-    const p = products.find(pp=>pp.id===b.dataset.atalhoProduto);
-    if(!p) return;
-    // se o unico item ainda estiver vazio, preenche ele em vez de criar um novo
-    const vazio = orderDraftItems.length===1 && !orderDraftItems[0].produtoId;
-    const novoItem = { produtoId: p.id, qtd: 1, separado:false, precoUnit: p.preco, unidadeFiltro: p.unidade };
-    if(vazio){ orderDraftItems[0] = novoItem; } else { orderDraftItems.push(novoItem); }
-    document.getElementById('order-items-wrap').innerHTML = orderDraftItems.map((it,i)=>orderItemRowHTML(it,i)).join('');
-    rebindItemRows();
-    recalcOrderTotal();
-  }));
 
   form.addEventListener('submit', async (e)=>{
     e.preventDefault();
