@@ -538,6 +538,11 @@ function sortByName(arr){
 
 // ---------- DROPDOWN CUSTOMIZADO DE PRODUTO (busca + auto-scroll ao passar o mouse) ----------
 let dropdownScrollSpeed = 0;
+let searchRenderRAF = null;
+function scheduleSearchRender(fn){
+  if(searchRenderRAF) cancelAnimationFrame(searchRenderRAF);
+  searchRenderRAF = requestAnimationFrame(fn);
+}
 let dropdownScrollRAF = null;
 let dropdownOutsideHandler = null;
 function stopDropdownAutoScroll(){
@@ -3336,7 +3341,14 @@ function attachContentEvents(){
     }
   }));
   const clienteSearch = document.getElementById('cliente-search');
-  if(clienteSearch) clienteSearch.addEventListener('input', (e)=>{ clienteFilter = e.target.value; render(); document.getElementById('cliente-search').focus(); document.getElementById('cliente-search').setSelectionRange(clienteFilter.length, clienteFilter.length); });
+  if(clienteSearch) clienteSearch.addEventListener('input', (e)=>{
+    clienteFilter = e.target.value;
+    scheduleSearchRender(()=>{
+      render();
+      const el = document.getElementById('cliente-search');
+      if(el){ el.focus(); el.setSelectionRange(clienteFilter.length, clienteFilter.length); }
+    });
+  });
   document.querySelectorAll('[data-view-pedidos]').forEach(el=>el.addEventListener('click', ()=>{
     pedidoClienteFilterId = el.dataset.viewPedidos;
     pedidoFilter = 'todos';
@@ -3367,7 +3379,14 @@ function attachContentEvents(){
     }
   }));
   const fornecedorSearch = document.getElementById('fornecedor-search');
-  if(fornecedorSearch) fornecedorSearch.addEventListener('input', (e)=>{ fornecedorFilter = e.target.value; render(); document.getElementById('fornecedor-search').focus(); document.getElementById('fornecedor-search').setSelectionRange(fornecedorFilter.length, fornecedorFilter.length); });
+  if(fornecedorSearch) fornecedorSearch.addEventListener('input', (e)=>{
+    fornecedorFilter = e.target.value;
+    scheduleSearchRender(()=>{
+      render();
+      const el = document.getElementById('fornecedor-search');
+      if(el){ el.focus(); el.setSelectionRange(fornecedorFilter.length, fornecedorFilter.length); }
+    });
+  });
   document.querySelectorAll('[data-view-compras]').forEach(el=>el.addEventListener('click', ()=>{
     compraFornecedorFilterId = el.dataset.viewCompras;
     activeTab = 'compras';
@@ -3404,9 +3423,12 @@ function attachContentEvents(){
   if(caixaFilterSel) caixaFilterSel.addEventListener('change', (e)=>{ caixaFilter = e.target.value; render(); });
   const caixaSearchInput = document.getElementById('caixa-search');
   if(caixaSearchInput) caixaSearchInput.addEventListener('input', (e)=>{
-    caixaSearch = e.target.value; render();
-    const el = document.getElementById('caixa-search');
-    if(el){ el.focus(); el.setSelectionRange(caixaSearch.length, caixaSearch.length); }
+    caixaSearch = e.target.value;
+    scheduleSearchRender(()=>{
+      render();
+      const el = document.getElementById('caixa-search');
+      if(el){ el.focus(); el.setSelectionRange(caixaSearch.length, caixaSearch.length); }
+    });
   });
 
   // PRODUTOS
@@ -3431,7 +3453,14 @@ function attachContentEvents(){
     }
   }));
   const produtoSearch = document.getElementById('produto-search');
-  if(produtoSearch) produtoSearch.addEventListener('input', (e)=>{ produtoFilter = e.target.value; render(); document.getElementById('produto-search').focus(); document.getElementById('produto-search').setSelectionRange(produtoFilter.length, produtoFilter.length); });
+  if(produtoSearch) produtoSearch.addEventListener('input', (e)=>{
+    produtoFilter = e.target.value;
+    scheduleSearchRender(()=>{
+      render();
+      const el = document.getElementById('produto-search');
+      if(el){ el.focus(); el.setSelectionRange(produtoFilter.length, produtoFilter.length); }
+    });
+  });
 
   // PEDIDOS
   const addPedido = document.getElementById('add-pedido-btn');
@@ -3527,9 +3556,12 @@ function attachContentEvents(){
   if(pedidoFilterSel) pedidoFilterSel.addEventListener('change', (e)=>{ pedidoFilter = e.target.value; render(); });
   const pedidoSearchInput = document.getElementById('pedido-search');
   if(pedidoSearchInput) pedidoSearchInput.addEventListener('input', (e)=>{
-    pedidoSearch = e.target.value; render();
-    const el = document.getElementById('pedido-search');
-    if(el){ el.focus(); el.setSelectionRange(pedidoSearch.length, pedidoSearch.length); }
+    pedidoSearch = e.target.value;
+    scheduleSearchRender(()=>{
+      render();
+      const el = document.getElementById('pedido-search');
+      if(el){ el.focus(); el.setSelectionRange(pedidoSearch.length, pedidoSearch.length); }
+    });
   });
   const pedidoDateFromInput = document.getElementById('pedido-date-from');
   if(pedidoDateFromInput) pedidoDateFromInput.addEventListener('change', (e)=>{ pedidoDateFrom = e.target.value; render(); });
@@ -3610,9 +3642,12 @@ function attachContentEvents(){
   if(compraFilterSel) compraFilterSel.addEventListener('change', (e)=>{ compraFilter = e.target.value; render(); });
   const compraSearchInput = document.getElementById('compra-search');
   if(compraSearchInput) compraSearchInput.addEventListener('input', (e)=>{
-    compraSearch = e.target.value; render();
-    const el = document.getElementById('compra-search');
-    if(el){ el.focus(); el.setSelectionRange(compraSearch.length, compraSearch.length); }
+    compraSearch = e.target.value;
+    scheduleSearchRender(()=>{
+      render();
+      const el = document.getElementById('compra-search');
+      if(el){ el.focus(); el.setSelectionRange(compraSearch.length, compraSearch.length); }
+    });
   });
   const compraDateFromInput = document.getElementById('compra-date-from');
   if(compraDateFromInput) compraDateFromInput.addEventListener('change', (e)=>{ compraDateFrom = e.target.value; render(); });
