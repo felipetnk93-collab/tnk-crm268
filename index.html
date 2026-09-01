@@ -608,7 +608,11 @@ function openClientDropdown(anchorEl, currentClienteId, onSelect){
   }
   renderList('');
 
-  searchInput.addEventListener('input', ()=> renderList(searchInput.value));
+  let renderListRAF = null;
+  searchInput.addEventListener('input', ()=>{
+    if(renderListRAF) cancelAnimationFrame(renderListRAF);
+    renderListRAF = requestAnimationFrame(()=> renderList(searchInput.value));
+  });
   searchInput.addEventListener('keydown', (e)=>{
     const items = listEl.querySelectorAll('.product-dropdown-item');
     if(e.key==='ArrowDown'){
@@ -1085,7 +1089,11 @@ function openProductDropdown(anchorEl, currentProdutoId, labelFn, onSelect, unid
   }
   renderList('');
 
-  searchInput.addEventListener('input', ()=> renderList(searchInput.value));
+  let renderListRAF = null;
+  searchInput.addEventListener('input', ()=>{
+    if(renderListRAF) cancelAnimationFrame(renderListRAF);
+    renderListRAF = requestAnimationFrame(()=> renderList(searchInput.value));
+  });
   searchInput.addEventListener('keydown', (e)=>{
     const items = listEl.querySelectorAll('.product-dropdown-item');
     if(e.key==='ArrowDown'){
@@ -5074,4 +5082,3 @@ async function startAppAfterAuth(){
 </body>
 </html>
 
-        
