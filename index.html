@@ -2913,19 +2913,15 @@ function pedidoTextoWhatsapp(o){
   const cliente = clients.find(c=>c.id===o.clienteId);
   const linhas = o.itens.map(i=>
     `${i.produtoNome}\n- ${i.qtd}${abbrevUnidade(i.unidade)}  X ${fmtMoney(i.precoUnit)}  = ${fmtMoney(i.qtd*i.precoUnit)}`
-  ).join('\n');
-  const fp = formaPagamentoInfo(o.formaPagamento);
-  const statusTxt = o.statusPagamento==='pago' ? 'Pago' : (o.statusPagamento==='parcial' ? `Parcial (falta ${fmtMoney(orderTotal(o)-(o.valorPago||0))})` : 'Pendente');
-  let txt = `Olá\n\n`;
-  txt += `Quando puder, dá uma conferida se está tudo certo. Qualquer coisa é só me avisar.\n\n`;
+  ).join('\n\n');
+  let txt = `Olá\n`;
+  txt += `Quando puder, dá uma conferida se está tudo certo. Qualquer coisa é só me avisar.\n`;
   txt += `Obrigado\n\n`;
-  txt += `*Tanaka - Box 268*\n`;
+  txt += `*Tanaka - Box 268*\n\n`;
   txt += `Pedido - ${fmtDate(o.data)}\n`;
   txt += `Cliente: ${cliente ? cliente.nome : '(removido)'}\n\n`;
   txt += `${linhas}\n\n`;
-  txt += `*Total: ${fmtMoney(orderTotal(o))}*\n`;
-  txt += `Entregue: ${o.entregue ? 'Sim' : 'Não'}\n`;
-  txt += `Pagamento: ${statusTxt}${fp ? ' ('+fp.label+')' : ''}`;
+  txt += `*Total: ${fmtMoney(orderTotal(o))}*`;
   return txt;
 }
 function buildCompraReceiptBytes(c){
@@ -5117,3 +5113,4 @@ async function startAppAfterAuth(){
 </body>
 </html>
 
+  
