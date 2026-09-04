@@ -2912,7 +2912,7 @@ function compraTextoWhatsapp(c){
 function pedidoTextoWhatsapp(o){
   const cliente = clients.find(c=>c.id===o.clienteId);
   const linhas = o.itens.map(i=>
-    `- ${i.qtd}${abbrevUnidade(i.unidade)} ${i.produtoNome} (${fmtMoney(i.precoUnit)}) = ${fmtMoney(i.qtd*i.precoUnit)}`
+    `${i.produtoNome}\n- ${i.qtd}${abbrevUnidade(i.unidade)}  X ${fmtMoney(i.precoUnit)}  = ${fmtMoney(i.qtd*i.precoUnit)}`
   ).join('\n');
   const fp = formaPagamentoInfo(o.formaPagamento);
   const statusTxt = o.statusPagamento==='pago' ? 'Pago' : (o.statusPagamento==='parcial' ? `Parcial (falta ${fmtMoney(orderTotal(o)-(o.valorPago||0))})` : 'Pendente');
