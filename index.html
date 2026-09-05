@@ -2896,17 +2896,15 @@ function compraTextoWhatsapp(c){
   const fornecedor = fornecedores.find(f=>f.id===c.fornecedorId);
   const linhas = c.itens.map(i=>{
     if(compraItemPrecoPendente(i)){
-      return `- ${i.qtd}${abbrevUnidade(i.unidade)} ${i.produtoNome} — _preço pendente_`;
+      return `${i.produtoNome}\n- ${i.qtd}${abbrevUnidade(i.unidade)}  X _preço pendente_`;
     }
-    return `- ${i.qtd}${abbrevUnidade(i.unidade)} ${i.produtoNome} (${fmtMoney(i.custoUnit)}) = ${fmtMoney(i.qtd*i.custoUnit)}`;
-  }).join('\n');
-  const fp = formaPagamentoInfo(c.formaPagamento);
-  let txt = `*Tanaka - Box 268*\n`;
+    return `${i.produtoNome}\n- ${i.qtd}${abbrevUnidade(i.unidade)}  X ${fmtMoney(i.custoUnit)}  = ${fmtMoney(i.qtd*i.custoUnit)}`;
+  }).join('\n\n');
+  let txt = `*Tanaka - Box 268*\n\n`;
   txt += `Compra - ${fmtDate(c.data)}\n`;
   txt += `Fornecedor: ${fornecedor ? fornecedor.nome : '(removido)'}\n\n`;
   txt += `${linhas}\n\n`;
-  txt += `*Total: ${fmtMoney(compraTotal(c))}*\n`;
-  txt += `Pagamento: ${c.statusPagamento==='pago' ? 'Pago' : 'Pendente'}${fp ? ' ('+fp.label+')' : ''}`;
+  txt += `*Total: ${fmtMoney(compraTotal(c))}*`;
   return txt;
 }
 function pedidoTextoWhatsapp(o){
@@ -5113,4 +5111,3 @@ async function startAppAfterAuth(){
 </body>
 </html>
 
-  
