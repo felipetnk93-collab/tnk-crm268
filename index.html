@@ -209,11 +209,6 @@
     padding:5px 6px;background:#fff;color:var(--wood);
   }
   .order-card{flex-direction:column;align-items:stretch;gap:10px;}
-  .order-card.aguardando-retirada{border:2px solid var(--corn);background:#FFFCF3;}
-  .aguardando-retirada-badge{
-    background:#FDF1D6;color:#8A6416;font-size:12px;font-weight:700;
-    padding:6px 10px;border-radius:8px;text-align:center;
-  }
   .order-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
   .order-card-top .name{font-weight:700;color:var(--chalk);font-size:15px;}
   .order-card-top .date-tag{font-weight:400;color:var(--wood-light);font-size:12px;}
@@ -233,13 +228,6 @@
   }
   .order-total-tag{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:16px;color:var(--tomato);}
   .status-checks{display:flex;gap:8px;flex-wrap:wrap;}
-  .check-pill{
-    display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;
-    text-transform:uppercase;letter-spacing:0.3px;padding:6px 11px;border-radius:20px;
-    background:var(--paper-2);color:var(--wood-light);cursor:pointer;transition:background .12s,color .12s;
-  }
-  .check-pill input[type=checkbox]{width:14px;height:14px;cursor:pointer;}
-  .check-pill.on{background:#DDE9F0;color:#3A6E8A;}
   .pay-status-select{
     font-family:'Inter';font-size:12px;font-weight:600;border-radius:20px;
     padding:6px 10px;border:1px solid var(--line);cursor:pointer;outline:none;
@@ -260,8 +248,6 @@
     background:#fff;cursor:pointer;
   }
   .checkbox-field input{width:16px;height:16px;accent-color:var(--tomato);cursor:pointer;}
-  .item-separado-check{display:flex;align-items:center;justify-content:center;padding:8px 6px;margin:-8px -6px;cursor:pointer;}
-  .item-separado-check input{width:20px;height:20px;accent-color:var(--sage);cursor:pointer;}
 
   .printer-status-bar{margin-bottom:14px;}
   .printer-pill{
@@ -2080,11 +2066,8 @@ function renderPrinterStatusBar(){
 }
 function renderPedidos(){
   let filtered = [...orders].sort((a,b)=>b.data.localeCompare(a.data)||b.criadoEm-a.criadoEm);
-  if(pedidoFilter==='nao_entregue') filtered = filtered.filter(o=>!o.entregue);
-  if(pedidoFilter==='entregue') filtered = filtered.filter(o=>o.entregue);
   if(pedidoFilter==='nao_pago') filtered = filtered.filter(o=>o.statusPagamento!=='pago');
   if(pedidoFilter==='pago') filtered = filtered.filter(o=>o.statusPagamento==='pago');
-  if(pedidoFilter==='aguardando_retirada') filtered = filtered.filter(o=>o.statusPagamento==='pago' && !o.entregue);
   if(pedidoDateFrom) filtered = filtered.filter(o=>o.data>=pedidoDateFrom);
   if(pedidoDateTo) filtered = filtered.filter(o=>o.data<=pedidoDateTo);
   if(pedidoSearch.trim()){
@@ -2110,11 +2093,8 @@ function renderPedidos(){
       <div class="search-box">${ICON.search}<input id="pedido-search" placeholder="Buscar cliente ou produto..." value="${escapeAttr(pedidoSearch)}"></div>
       <select class="status-select" id="pedido-filter">
         <option value="todos" ${pedidoFilter==='todos'?'selected':''}>Todos</option>
-        <option value="nao_entregue" ${pedidoFilter==='nao_entregue'?'selected':''}>A entregar</option>
-        <option value="entregue" ${pedidoFilter==='entregue'?'selected':''}>Entregues</option>
         <option value="nao_pago" ${pedidoFilter==='nao_pago'?'selected':''}>A receber</option>
         <option value="pago" ${pedidoFilter==='pago'?'selected':''}>Pagos</option>
-        <option value="aguardando_retirada" ${pedidoFilter==='aguardando_retirada'?'selected':''}>📦 Pago, aguardando retirada</option>
       </select>
       <button class="btn primary" id="add-pedido-btn">${ICON.plus} Novo</button>
       <button class="btn ghost" id="pedido-voz-btn">🎤 Pedido por voz</button>
@@ -2157,9 +2137,8 @@ function orderItemPrecoPendente(it){
 }
 function orderCardHTML(o){
   const cliente = clients.find(c=>c.id===o.clienteId);
-  const aguardandoRetirada = o.statusPagamento==='pago' && !o.entregue;
   return `
-    <div class="item-card order-card ${aguardandoRetirada?'aguardando-retirada':''}">
+    <div class="item-card order-card">
       <div class="order-card-top">
         <div class="name">${cliente ? `<span class="clickable-name" data-filter-cliente-pedido="${cliente.id}">${escapeHtml(cliente.nome)}</span>` : '(cliente removido)'} <span class="date-tag">· ${fmtDate(o.data)}</span></div>
         <div class="actions-row">
@@ -2170,21 +2149,16 @@ function orderCardHTML(o){
           <button class="icon-btn danger" data-del-pedido="${o.id}">${ICON.trash}</button>
         </div>
       </div>
-      ${aguardandoRetirada ? `<div class="aguardando-retirada-badge">📦 Pago — mercadoria aguardando retirada</div>` : ''}
       <div class="order-items-checklist">
         ${o.itens.map((it,idx)=>`
-          <label class="check-row ${it.separado?'checked-row':''}">
-            <input type="checkbox" data-toggle-item-order="${o.id}" data-toggle-item-idx="${idx}" ${it.separado?'checked':''}>
+          <div class="check-row">
             <span>${orderItemPrecoPendente(it) ? '⚠️ ' : ''}${it.qtd}${abbrevUnidade(it.unidade)} ${escapeHtml(it.produtoNome)}${orderItemPrecoPendente(it) ? ' — preço pendente' : ` — ${fmtMoney(it.precoUnit)} = ${fmtMoney(it.qtd*it.precoUnit)}`}</span>
-          </label>
+          </div>
         `).join('')}
       </div>
       <div class="order-card-bottom">
         <div class="order-total-tag">${fmtMoney(orderTotal(o))}${o.statusPagamento==='parcial' ? `<div class="order-parcial-info">Pago: ${fmtMoney(o.valorPago||0)} · Falta: ${fmtMoney(orderTotal(o)-(o.valorPago||0))}</div>` : ''}</div>
         <div class="status-checks">
-          <label class="check-pill ${o.entregue?'on':''}">
-            <input type="checkbox" data-toggle-entregue="${o.id}" ${o.entregue?'checked':''}> Entregue
-          </label>
           <select class="forma-pag-select" data-forma-pagamento="${o.id}">
             <option value="" ${!o.formaPagamento?'selected':''}>Forma de pgto.</option>
             ${FORMAS_PAGAMENTO.map(f=>`<option value="${f.v}" ${o.formaPagamento===f.v?'selected':''}>${f.icon} ${f.label}</option>`).join('')}
@@ -2772,7 +2746,7 @@ function buildOrderListReceiptBytes(list){
     add(escposLine(`${cliente ? cliente.nome : '(removido)'} - ${fmtDate(o.data)}`));
     add(escposSize(0,0)); add(escposBold(false));
     add(escposLine(itensResumo));
-    add(escposLine((o.entregue?'Entregue':'A entregar') + ' - ' + (o.statusPagamento==='pago'?'Pago':'Pendente') + (fp?' - '+fp.label:'')));
+    add(escposLine((o.statusPagamento==='pago'?'Pago':'Pendente') + (fp?' - '+fp.label:'')));
     add(escposLine(padLine('Total', fmtMoney(orderTotal(o)))));
   });
   const totalGeral = list.reduce((s,o)=>s+orderTotal(o),0);
@@ -3137,17 +3111,12 @@ function pedidoFormHTML(o, prefill){
       </div>
       <div class="order-total"><span class="lbl">Total</span><span class="val" id="order-total-display">${fmtMoney(0)}</span></div>
       <div class="field">
-        <label>Status do pedido</label>
-        <div class="row2">
-          <label class="checkbox-field"><input type="checkbox" id="f-entregue" ${o.entregue?'checked':''}> Entregue</label>
-          <div class="field" style="margin-bottom:0;">
-            <select id="f-status-pagamento" class="pay-status-select ${o.statusPagamento==='pago'?'pago':(o.statusPagamento==='parcial'?'parcial':'pendente')}" style="width:100%;">
-              <option value="pendente" ${o.statusPagamento==='pendente'?'selected':''}>🟡 Pendente</option>
-              <option value="parcial" ${o.statusPagamento==='parcial'?'selected':''}>🔵 Parcial${o.statusPagamento==='parcial'?' (falta '+fmtMoney(orderTotal(o)-(o.valorPago||0))+')':''}</option>
-              <option value="pago" ${o.statusPagamento==='pago'?'selected':''}>🟢 Pago</option>
-            </select>
-          </div>
-        </div>
+        <label>Status de pagamento</label>
+        <select id="f-status-pagamento" class="pay-status-select ${o.statusPagamento==='pago'?'pago':(o.statusPagamento==='parcial'?'parcial':'pendente')}" style="width:100%;">
+          <option value="pendente" ${o.statusPagamento==='pendente'?'selected':''}>🟡 Pendente</option>
+          <option value="parcial" ${o.statusPagamento==='parcial'?'selected':''}>🔵 Parcial${o.statusPagamento==='parcial'?' (falta '+fmtMoney(orderTotal(o)-(o.valorPago||0))+')':''}</option>
+          <option value="pago" ${o.statusPagamento==='pago'?'selected':''}>🟢 Pago</option>
+        </select>
       </div>
       <div class="field">
         <label>Forma de pagamento</label>
@@ -3170,7 +3139,6 @@ function orderItemRowHTML(it, idx){
   return `
     <div class="order-item-row" data-row="${idx}">
       <div class="oi-top">
-        <label class="item-separado-check"><input type="checkbox" data-item-separado="${idx}" ${it.separado?'checked':''}></label>
         <select class="unidade-filtro-select" data-item-unidade-filtro="${idx}">
           <option value="">Un.</option>
           ${UNIDADES.map(u=>`<option value="${u}" ${unidadeFiltro===u?'selected':''}>${abbrevUnidade(u)}</option>`).join('')}
@@ -3482,10 +3450,6 @@ function attachContentEvents(){
       await saveOrders(); showToast('Pedido removido.'); render();
     }
   }));
-  document.querySelectorAll('[data-toggle-entregue]').forEach(cb=>cb.addEventListener('change', ()=>{
-    const o = orders.find(x=>x.id===cb.dataset.toggleEntregue);
-    if(o){ o.entregue = cb.checked; o.atualizadoEm = Date.now(); scheduleSaveOrders(); render(); }
-  }));
   document.querySelectorAll('[data-status-pagamento]').forEach(sel=>sel.addEventListener('change', ()=>{
     const o = orders.find(x=>x.id===sel.dataset.statusPagamento);
     if(o){
@@ -3499,11 +3463,6 @@ function attachContentEvents(){
   document.querySelectorAll('[data-forma-pagamento]').forEach(sel=>sel.addEventListener('change', ()=>{
     const o = orders.find(x=>x.id===sel.dataset.formaPagamento);
     if(o){ o.formaPagamento = sel.value; o.atualizadoEm = Date.now(); scheduleSaveOrders(); render(); }
-  }));
-  document.querySelectorAll('[data-toggle-item-order]').forEach(cb=>cb.addEventListener('change', ()=>{
-    const o = orders.find(x=>x.id===cb.dataset.toggleItemOrder);
-    const idx = Number(cb.dataset.toggleItemIdx);
-    if(o && o.itens[idx]){ o.itens[idx].separado = cb.checked; o.atualizadoEm = Date.now(); scheduleSaveOrders(); render(); }
   }));
   document.querySelectorAll('[data-print-pedido]').forEach(b=>b.addEventListener('click', ()=>{
     printOrder(b.dataset.printPedido);
@@ -3936,8 +3895,7 @@ function calcularFechamento(data){
     const key = o.formaPagamento || 'não informado';
     porForma[key] = (porForma[key]||0) + Number(o.valorPago||0);
   });
-  const entregues = pedidosDoDia.filter(o=>o.entregue).length;
-  return { pedidosDoDia, totalVendido, totalRecebido, totalPendente, porForma, entregues };
+  return { pedidosDoDia, totalVendido, totalRecebido, totalPendente, porForma };
 }
 // ---------- RESUMO DE COMPRAS DO DIA (com desconto de vendas) ----------
 let resumoComprasData = localDateISO(0);
@@ -4108,7 +4066,6 @@ function fechamentoConteudoHTML(f){
       ${formasTxt || '<div class="fechamento-linha"><span>—</span><span>—</span></div>'}
       <div class="fechamento-sep"></div>
       <div class="fechamento-linha"><span>Pedidos no dia</span><span>${f.pedidosDoDia.length}</span></div>
-      <div class="fechamento-linha"><span>Entregues</span><span>${f.entregues} de ${f.pedidosDoDia.length}</span></div>
     </div>
   `;
 }
@@ -4136,7 +4093,7 @@ function buildFechamentoReceiptBytes(f, data){
     add(escposLine(padLine('  '+label, fmtMoney(f.porForma[k]))));
   });
   add(escposLine('-'.repeat(32)));
-  add(escposLine(`Pedidos: ${f.pedidosDoDia.length}  |  Entregues: ${f.entregues}`));
+  add(escposLine(`Pedidos: ${f.pedidosDoDia.length}`));
   add(escposFeed(3));
   add(escposCut());
   return b;
@@ -4633,11 +4590,6 @@ function bindPedidoForm(existing){
         recalcOrderTotal();
       });
     });
-    document.querySelectorAll('[data-item-separado]').forEach(cb=>{
-      cb.addEventListener('change', ()=>{
-        orderDraftItems[cb.dataset.itemSeparado].separado = cb.checked;
-      });
-    });
     document.querySelectorAll('[data-remove-item]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         closeProductDropdown();
@@ -4665,7 +4617,7 @@ function bindPedidoForm(existing){
     e.preventDefault();
     const clienteId = document.getElementById('f-cliente').value;
     const data = document.getElementById('f-data').value;
-    const entregue = document.getElementById('f-entregue').checked;
+    const entregue = existing ? existing.entregue : false;
     const statusPagamento = document.getElementById('f-status-pagamento').value;
     const formaPagamento = document.getElementById('f-forma-pagamento').value;
     if(!clienteId || !data) return;
