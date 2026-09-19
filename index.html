@@ -524,10 +524,23 @@ function sortByName(arr){
 
 // ---------- DROPDOWN CUSTOMIZADO DE PRODUTO (busca + auto-scroll ao passar o mouse) ----------
 let dropdownScrollSpeed = 0;
-let searchRenderRAF = null;
-function scheduleSearchRender(fn){
-  if(searchRenderRAF) cancelAnimationFrame(searchRenderRAF);
-  searchRenderRAF = requestAnimationFrame(fn);
+function renderPreservingInput(inputId){
+  const old = document.getElementById(inputId);
+  const hadFocus = old && document.activeElement === old;
+  const selStart = old ? old.selectionStart : null;
+  const selEnd = old ? old.selectionEnd : null;
+  if(old && old.parentNode) old.parentNode.removeChild(old);
+  render();
+  if(old){
+    const fresh = document.getElementById(inputId);
+    if(fresh && fresh.parentNode){
+      fresh.parentNode.replaceChild(old, fresh);
+      if(hadFocus){
+        old.focus();
+        if(selStart!==null) old.setSelectionRange(selStart, selEnd);
+      }
+    }
+  }
 }
 let dropdownScrollRAF = null;
 let dropdownOutsideHandler = null;
@@ -3305,11 +3318,7 @@ function attachContentEvents(){
   const clienteSearch = document.getElementById('cliente-search');
   if(clienteSearch) clienteSearch.addEventListener('input', (e)=>{
     clienteFilter = e.target.value;
-    scheduleSearchRender(()=>{
-      render();
-      const el = document.getElementById('cliente-search');
-      if(el){ el.focus(); el.setSelectionRange(clienteFilter.length, clienteFilter.length); }
-    });
+    renderPreservingInput('cliente-search');
   });
   document.querySelectorAll('[data-view-pedidos]').forEach(el=>el.addEventListener('click', ()=>{
     pedidoClienteFilterId = el.dataset.viewPedidos;
@@ -3343,11 +3352,7 @@ function attachContentEvents(){
   const fornecedorSearch = document.getElementById('fornecedor-search');
   if(fornecedorSearch) fornecedorSearch.addEventListener('input', (e)=>{
     fornecedorFilter = e.target.value;
-    scheduleSearchRender(()=>{
-      render();
-      const el = document.getElementById('fornecedor-search');
-      if(el){ el.focus(); el.setSelectionRange(fornecedorFilter.length, fornecedorFilter.length); }
-    });
+    renderPreservingInput('fornecedor-search');
   });
   document.querySelectorAll('[data-view-compras]').forEach(el=>el.addEventListener('click', ()=>{
     compraFornecedorFilterId = el.dataset.viewCompras;
@@ -3386,11 +3391,7 @@ function attachContentEvents(){
   const caixaSearchInput = document.getElementById('caixa-search');
   if(caixaSearchInput) caixaSearchInput.addEventListener('input', (e)=>{
     caixaSearch = e.target.value;
-    scheduleSearchRender(()=>{
-      render();
-      const el = document.getElementById('caixa-search');
-      if(el){ el.focus(); el.setSelectionRange(caixaSearch.length, caixaSearch.length); }
-    });
+    renderPreservingInput('caixa-search');
   });
 
   // PRODUTOS
@@ -3417,11 +3418,7 @@ function attachContentEvents(){
   const produtoSearch = document.getElementById('produto-search');
   if(produtoSearch) produtoSearch.addEventListener('input', (e)=>{
     produtoFilter = e.target.value;
-    scheduleSearchRender(()=>{
-      render();
-      const el = document.getElementById('produto-search');
-      if(el){ el.focus(); el.setSelectionRange(produtoFilter.length, produtoFilter.length); }
-    });
+    renderPreservingInput('produto-search');
   });
 
   // PEDIDOS
@@ -3510,11 +3507,7 @@ function attachContentEvents(){
   const pedidoSearchInput = document.getElementById('pedido-search');
   if(pedidoSearchInput) pedidoSearchInput.addEventListener('input', (e)=>{
     pedidoSearch = e.target.value;
-    scheduleSearchRender(()=>{
-      render();
-      const el = document.getElementById('pedido-search');
-      if(el){ el.focus(); el.setSelectionRange(pedidoSearch.length, pedidoSearch.length); }
-    });
+    renderPreservingInput('pedido-search');
   });
   const pedidoDateFromInput = document.getElementById('pedido-date-from');
   if(pedidoDateFromInput) pedidoDateFromInput.addEventListener('change', (e)=>{ pedidoDateFrom = e.target.value; render(); });
@@ -3596,11 +3589,7 @@ function attachContentEvents(){
   const compraSearchInput = document.getElementById('compra-search');
   if(compraSearchInput) compraSearchInput.addEventListener('input', (e)=>{
     compraSearch = e.target.value;
-    scheduleSearchRender(()=>{
-      render();
-      const el = document.getElementById('compra-search');
-      if(el){ el.focus(); el.setSelectionRange(compraSearch.length, compraSearch.length); }
-    });
+    renderPreservingInput('compra-search');
   });
   const compraDateFromInput = document.getElementById('compra-date-from');
   if(compraDateFromInput) compraDateFromInput.addEventListener('change', (e)=>{ compraDateFrom = e.target.value; render(); });
