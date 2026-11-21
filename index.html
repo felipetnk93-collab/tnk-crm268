@@ -1271,7 +1271,7 @@ async function savePagamentos(){ const r = await safeSet('ceasa_pagamentos', pag
 let ordersSaveTimer = null;
 function scheduleSaveOrders(){
   clearTimeout(ordersSaveTimer);
-  ordersSaveTimer = setTimeout(()=>{ saveOrders(); }, 900);
+  ordersSaveTimer = setTimeout(()=>{ saveOrders(); }, 300);
 }
 
 // ---------- SINCRONIZAÇÃO ENTRE APARELHOS (nuvem via Firebase Realtime Database) ----------
@@ -1425,6 +1425,7 @@ function cleanSyncUrl(u){
 async function loadSyncConfig(){
   try{ syncUrl = await safeGet('ceasa_sync_url'); }catch(e){ syncUrl = null; }
   try{ lastSyncedTimestamp = (await safeGet('ceasa_sync_ts')) || 0; }catch(e){ lastSyncedTimestamp = 0; }
+  try{ pendingLocalChanges = !!(await safeGet('ceasa_pending')); }catch(e){ /* mantém */ }
 }
 async function saveSyncUrlConfig(url){
   syncUrl = url || null;
@@ -1455,9 +1456,10 @@ function updateSyncCloudStatusUI(){
 function scheduleCloudPush(){
   if(!syncUrl) return;
   pendingLocalChanges = true;
+  safeSet('ceasa_pending', true);
   updateSyncCloudStatusUI();
   clearTimeout(cloudPushTimer);
-  cloudPushTimer = setTimeout(()=>{ pushToCloud(); }, 1500);
+  cloudPushTimer = setTimeout(()=>{ pushToCloud(); }, 600);
 }
 let tombstones = { clients:[], products:[], orders:[], fornecedores:[], compras:[], caixas:[], pagamentos:[] };
 async function loadTombstones(){
@@ -1562,6 +1564,7 @@ async function pushToCloud(){
     if(res.ok){
       await saveSyncTimestamp(ts);
       pendingLocalChanges = false;
+      safeSet('ceasa_pending', false);
       ok = true;
     }
   }catch(e){
@@ -1626,6 +1629,10 @@ async function pullFromCloud(force){
           await saveSyncTimestamp(remote.updatedAt);
           render();
           applied = true;
+          const norm = o=>JSON.stringify(Object.keys(o).sort().map(k=>[k,(o[k]||[]).map(i=>JSON.stringify(i)).sort()]));
+          const mergedNorm = norm({clients, products, orders, fornecedores, compras, caixas, pagamentos});
+          const remoteNorm = norm({clients: remoteClients, products: remoteProducts, orders: remoteOrders, fornecedores: remoteFornecedores, compras: remoteCompras, caixas: remoteCaixas, pagamentos: remotePagamentos});
+          if(mergedNorm !== remoteNorm){ scheduleCloudPush(); }
         }else{
           await saveSyncTimestamp(remote.updatedAt);
         }
@@ -1752,6 +1759,7 @@ document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState==='hidden'){
     if(ordersSaveTimer){ clearTimeout(ordersSaveTimer); saveOrders(); }
     retryPendingSaves();
+    if(syncUrl && pendingLocalChanges){ clearTimeout(cloudPushTimer); pushToCloud(); }
   }
 });
 
@@ -1841,22 +1849,52 @@ function emptyState(icon, big, small){
 
 // ---------- CLIENTES ----------
 let clienteFilter = '';
-function renderClientes(){
+function clientesResultsHTML(){
   const filtered = sortByName(clients.filter(c=>
     normalizeSearch(c.nome).includes(normalizeSearch(clienteFilter)) ||
     (c.telefone||'').includes(clienteFilter)
   ));
+  return filtered.length===0 ? emptyState('search','Nenhum cliente encontrado','Cadastre restaurantes, mercadinhos e feirantes que compram da banca.') : `
+    <div class="card-list">
+      ${filtered.map(c=>clientCardHTML(c)).join('')}
+    </div>
+  `;
+}
+function bindClienteItemEvents(){
+  document.querySelectorAll('[data-edit-cliente]').forEach(b=>b.addEventListener('click', ()=>{
+    const c = clients.find(x=>x.id===b.dataset.editCliente);
+    openModal(clienteFormHTML(c)); bindClienteForm(c);
+  }));
+  document.querySelectorAll('[data-registrar-pagamento]').forEach(b=>b.addEventListener('click', ()=>{
+    const c = clients.find(x=>x.id===b.dataset.registrarPagamento);
+    if(!c) return;
+    openModal(pagamentoClienteModalHTML(c));
+    bindPagamentoClienteModal(c);
+  }));
+  document.querySelectorAll('[data-del-cliente]').forEach(b=>b.addEventListener('click', async ()=>{
+    if(confirm('Remover este cliente? Pedidos ligados a ele continuarão registrados.')){
+      marcarExcluido('clients', b.dataset.delCliente);
+      await saveTombstones();
+      clients = clients.filter(x=>x.id!==b.dataset.delCliente);
+      await saveClients(); showToast('Cliente removido.'); render();
+    }
+  }));
+  document.querySelectorAll('[data-view-pedidos]').forEach(el=>el.addEventListener('click', ()=>{
+    pedidoClienteFilterId = el.dataset.viewPedidos;
+    pedidoFilter = 'todos';
+    activeTab = 'pedidos';
+    document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab==='pedidos'));
+    render();
+  }));
+}
+function renderClientes(){
   return `
     <div class="list-header">
       <h2>Clientes</h2>
       <div class="search-box">${ICON.search}<input id="cliente-search" placeholder="Buscar cliente..." value="${escapeAttr(clienteFilter)}"></div>
       <button class="btn primary" id="add-cliente-btn">${ICON.plus} Novo</button>
     </div>
-    ${filtered.length===0 ? emptyState('search','Nenhum cliente encontrado','Cadastre restaurantes, mercadinhos e feirantes que compram da banca.') : `
-      <div class="card-list">
-        ${filtered.map(c=>clientCardHTML(c)).join('')}
-      </div>
-    `}
+    <div id="clientes-results-body">${clientesResultsHTML()}</div>
   `;
 }
 function clienteTotalPendente(clienteId){
@@ -1888,22 +1926,51 @@ function clientCardHTML(c){
 
 // ---------- FORNECEDORES ----------
 let fornecedorFilter = '';
-function renderFornecedores(){
+function fornecedoresResultsHTML(){
   const filtered = sortByName(fornecedores.filter(f=>
     normalizeSearch(f.nome).includes(normalizeSearch(fornecedorFilter)) ||
     (f.telefone||'').includes(fornecedorFilter)
   ));
+  return filtered.length===0 ? emptyState('search','Nenhum fornecedor encontrado','Cadastre quem fornece produtos para a banca.') : `
+    <div class="card-list">
+      ${filtered.map(f=>fornecedorCardHTML(f)).join('')}
+    </div>
+  `;
+}
+function bindFornecedorItemEvents(){
+  document.querySelectorAll('[data-registrar-pagamento-fornecedor]').forEach(b=>b.addEventListener('click', ()=>{
+    const f = fornecedores.find(x=>x.id===b.dataset.registrarPagamentoFornecedor);
+    if(!f) return;
+    openModal(pagamentoFornecedorModalHTML(f));
+    bindPagamentoFornecedorModal(f);
+  }));
+  document.querySelectorAll('[data-edit-fornecedor]').forEach(b=>b.addEventListener('click', ()=>{
+    const f = fornecedores.find(x=>x.id===b.dataset.editFornecedor);
+    openModal(fornecedorFormHTML(f)); bindFornecedorForm(f);
+  }));
+  document.querySelectorAll('[data-del-fornecedor]').forEach(b=>b.addEventListener('click', async ()=>{
+    if(confirm('Remover este fornecedor? Compras ligadas a ele continuarão registradas.')){
+      marcarExcluido('fornecedores', b.dataset.delFornecedor);
+      await saveTombstones();
+      fornecedores = fornecedores.filter(x=>x.id!==b.dataset.delFornecedor);
+      await saveFornecedores(); showToast('Fornecedor removido.'); render();
+    }
+  }));
+  document.querySelectorAll('[data-view-compras]').forEach(el=>el.addEventListener('click', ()=>{
+    compraFornecedorFilterId = el.dataset.viewCompras;
+    activeTab = 'compras';
+    document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab==='compras'));
+    render();
+  }));
+}
+function renderFornecedores(){
   return `
     <div class="list-header">
       <h2>Fornecedores</h2>
       <div class="search-box">${ICON.search}<input id="fornecedor-search" placeholder="Buscar fornecedor..." value="${escapeAttr(fornecedorFilter)}"></div>
       <button class="btn primary" id="add-fornecedor-btn">${ICON.plus} Novo</button>
     </div>
-    ${filtered.length===0 ? emptyState('search','Nenhum fornecedor encontrado','Cadastre quem fornece produtos para a banca.') : `
-      <div class="card-list">
-        ${filtered.map(f=>fornecedorCardHTML(f)).join('')}
-      </div>
-    `}
+    <div id="fornecedores-results-body">${fornecedoresResultsHTML()}</div>
   `;
 }
 function fornecedorTotalPendente(fornecedorId){
@@ -1934,19 +2001,42 @@ function fornecedorCardHTML(f){
 
 // ---------- PRODUTOS ----------
 let produtoFilter = '';
-function renderProdutos(){
+function produtosResultsHTML(){
   const filtered = sortByName(products.filter(p=>normalizeSearch(p.nome).includes(normalizeSearch(produtoFilter))));
+  return filtered.length===0 ? emptyState('crate','O quadro está vazio','Adicione os produtos que a banca vende, com o preço do dia.') : `
+    <div class="tag-grid">
+      ${filtered.map(p=>productTagHTML(p)).join('')}
+    </div>
+  `;
+}
+function bindProdutoItemEvents(){
+  document.querySelectorAll('[data-edit-produto]').forEach(b=>b.addEventListener('click', ()=>{
+    const p = products.find(x=>x.id===b.dataset.editProduto);
+    openModal(produtoFormHTML(p)); bindProdutoForm(p);
+  }));
+  document.querySelectorAll('[data-ver-grafico]').forEach(b=>b.addEventListener('click', ()=>{
+    const p = products.find(x=>x.id===b.dataset.verGrafico);
+    if(!p) return;
+    openModal(graficoPrecoModalHTML(p));
+    document.getElementById('cancel-modal').addEventListener('click', closeModal);
+  }));
+  document.querySelectorAll('[data-del-produto]').forEach(b=>b.addEventListener('click', async ()=>{
+    if(confirm('Remover este produto do quadro?')){
+      marcarExcluido('products', b.dataset.delProduto);
+      await saveTombstones();
+      products = products.filter(x=>x.id!==b.dataset.delProduto);
+      await saveProducts(); showToast('Produto removido.'); render();
+    }
+  }));
+}
+function renderProdutos(){
   return `
     <div class="list-header">
       <h2>Quadro de preços</h2>
       <div class="search-box">${ICON.search}<input id="produto-search" placeholder="Buscar produto..." value="${escapeAttr(produtoFilter)}"></div>
       <button class="btn primary" id="add-produto-btn">${ICON.plus} Novo</button>
     </div>
-    ${filtered.length===0 ? emptyState('crate','O quadro está vazio','Adicione os produtos que a banca vende, com o preço do dia.') : `
-      <div class="tag-grid">
-        ${filtered.map(p=>productTagHTML(p)).join('')}
-      </div>
-    `}
+    <div id="produtos-results-body">${produtosResultsHTML()}</div>
   `;
 }
 function historicoVendaProduto(produtoId){
@@ -2077,7 +2167,7 @@ function renderBtPrinterRow(){
 function renderPrinterStatusBar(){
   return renderBtPrinterRow();
 }
-function renderPedidos(){
+function calcularPedidosFiltrados(){
   let filtered = [...orders].sort((a,b)=>b.data.localeCompare(a.data)||b.criadoEm-a.criadoEm);
   if(pedidoFilter==='nao_pago') filtered = filtered.filter(o=>o.statusPagamento!=='pago');
   if(pedidoFilter==='pago') filtered = filtered.filter(o=>o.statusPagamento==='pago');
@@ -2092,9 +2182,83 @@ function renderPedidos(){
       return clienteMatch || itemMatch;
     });
   }
-  const clienteFiltrado = pedidoClienteFilterId ? clients.find(c=>c.id===pedidoClienteFilterId) : null;
   if(pedidoClienteFilterId) filtered = filtered.filter(o=>o.clienteId===pedidoClienteFilterId);
   lastFilteredOrders = filtered;
+  return filtered;
+}
+function pedidosResultsHTML(){
+  const filtered = calcularPedidosFiltrados();
+  const clienteFiltrado = pedidoClienteFilterId ? clients.find(c=>c.id===pedidoClienteFilterId) : null;
+  return filtered.length===0 ? emptyState('crate', clienteFiltrado ? 'Nenhum pedido para esse cliente' : 'Nenhum pedido aqui', clienteFiltrado ? 'Esse cliente ainda não tem pedidos registrados.' : 'Crie um pedido novo para um cliente da banca.') : `
+    <div class="card-list">${filtered.map(o=>orderCardHTML(o)).join('')}</div>
+  `;
+}
+function bindPedidoItemEvents(){
+  document.querySelectorAll('[data-filter-cliente-pedido]').forEach(el=>el.addEventListener('click', ()=>{
+    pedidoClienteFilterId = el.dataset.filterClientePedido;
+    pedidoFilter = 'todos';
+    render();
+  }));
+  document.querySelectorAll('[data-edit-pedido]').forEach(b=>b.addEventListener('click', ()=>{
+    const o = orders.find(x=>x.id===b.dataset.editPedido);
+    openModal(pedidoFormHTML(o)); bindPedidoForm(o);
+  }));
+  document.querySelectorAll('[data-del-pedido]').forEach(b=>b.addEventListener('click', async ()=>{
+    if(confirm('Remover este pedido?')){
+      marcarExcluido('orders', b.dataset.delPedido);
+      await saveTombstones();
+      orders = orders.filter(x=>x.id!==b.dataset.delPedido);
+      await saveOrders(); showToast('Pedido removido.'); render();
+    }
+  }));
+  document.querySelectorAll('[data-status-pagamento]').forEach(sel=>sel.addEventListener('change', ()=>{
+    const o = orders.find(x=>x.id===sel.dataset.statusPagamento);
+    if(o){
+      o.statusPagamento = sel.value;
+      if(sel.value==='pago') o.valorPago = orderTotal(o);
+      if(sel.value==='pendente') o.valorPago = 0;
+      o.atualizadoEm = Date.now();
+      scheduleSaveOrders(); render();
+    }
+  }));
+  document.querySelectorAll('[data-forma-pagamento]').forEach(sel=>sel.addEventListener('change', ()=>{
+    const o = orders.find(x=>x.id===sel.dataset.formaPagamento);
+    if(o){ o.formaPagamento = sel.value; o.atualizadoEm = Date.now(); scheduleSaveOrders(); render(); }
+  }));
+  document.querySelectorAll('[data-print-pedido]').forEach(b=>b.addEventListener('click', ()=>{
+    printOrder(b.dataset.printPedido);
+  }));
+  document.querySelectorAll('[data-copy-pedido]').forEach(b=>b.addEventListener('click', async ()=>{
+    const o = orders.find(x=>x.id===b.dataset.copyPedido);
+    if(!o) return;
+    const texto = pedidoTextoWhatsapp(o);
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        await navigator.clipboard.writeText(texto);
+      }else{
+        const ta = document.createElement('textarea');
+        ta.value = texto;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      showToast('Copiado! Agora é só colar no WhatsApp.');
+    }catch(e){
+      console.error(e);
+      showToast('Não consegui copiar automaticamente. Tente novamente.');
+    }
+  }));
+  document.querySelectorAll('[data-print-pedido-pick]').forEach(b=>b.addEventListener('click', ()=>{
+    printOrderPick(b.dataset.printPedidoPick);
+  }));
+}
+function renderPedidos(){
+  calcularPedidosFiltrados();
+  const filtered = lastFilteredOrders;
+  const clienteFiltrado = pedidoClienteFilterId ? clients.find(c=>c.id===pedidoClienteFilterId) : null;
 
   const hoje = localDateISO(0);
   const isHoje = pedidoDateFrom===hoje && pedidoDateTo===hoje;
@@ -2137,9 +2301,7 @@ function renderPedidos(){
         <button id="clear-cliente-filter" class="link-btn">ver todos os pedidos</button>
       </div>
     ` : ''}
-    ${filtered.length===0 ? emptyState('crate', clienteFiltrado ? 'Nenhum pedido para esse cliente' : 'Nenhum pedido aqui', clienteFiltrado ? 'Esse cliente ainda não tem pedidos registrados.' : 'Crie um pedido novo para um cliente da banca.') : `
-      <div class="card-list">${filtered.map(o=>orderCardHTML(o)).join('')}</div>
-    `}
+    <div id="pedidos-results-body">${pedidosResultsHTML()}</div>
   `;
 }
 function orderTotal(o){
@@ -3297,69 +3459,24 @@ function attachContentEvents(){
   // CLIENTES
   const addCliente = document.getElementById('add-cliente-btn');
   if(addCliente) addCliente.addEventListener('click', ()=>{ openModal(clienteFormHTML(null)); bindClienteForm(null); });
-  document.querySelectorAll('[data-edit-cliente]').forEach(b=>b.addEventListener('click', ()=>{
-    const c = clients.find(x=>x.id===b.dataset.editCliente);
-    openModal(clienteFormHTML(c)); bindClienteForm(c);
-  }));
-  document.querySelectorAll('[data-registrar-pagamento]').forEach(b=>b.addEventListener('click', ()=>{
-    const c = clients.find(x=>x.id===b.dataset.registrarPagamento);
-    if(!c) return;
-    openModal(pagamentoClienteModalHTML(c));
-    bindPagamentoClienteModal(c);
-  }));
-  document.querySelectorAll('[data-del-cliente]').forEach(b=>b.addEventListener('click', async ()=>{
-    if(confirm('Remover este cliente? Pedidos ligados a ele continuarão registrados.')){
-      marcarExcluido('clients', b.dataset.delCliente);
-      await saveTombstones();
-      clients = clients.filter(x=>x.id!==b.dataset.delCliente);
-      await saveClients(); showToast('Cliente removido.'); render();
-    }
-  }));
+  bindClienteItemEvents();
   const clienteSearch = document.getElementById('cliente-search');
   if(clienteSearch) clienteSearch.addEventListener('input', (e)=>{
     clienteFilter = e.target.value;
-    renderPreservingInput('cliente-search');
+    const body = document.getElementById('clientes-results-body');
+    if(body){ body.innerHTML = clientesResultsHTML(); bindClienteItemEvents(); }
   });
-  document.querySelectorAll('[data-view-pedidos]').forEach(el=>el.addEventListener('click', ()=>{
-    pedidoClienteFilterId = el.dataset.viewPedidos;
-    pedidoFilter = 'todos';
-    activeTab = 'pedidos';
-    document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab==='pedidos'));
-    render();
-  }));
 
   // FORNECEDORES
   const addFornecedor = document.getElementById('add-fornecedor-btn');
   if(addFornecedor) addFornecedor.addEventListener('click', ()=>{ openModal(fornecedorFormHTML(null)); bindFornecedorForm(null); });
-  document.querySelectorAll('[data-registrar-pagamento-fornecedor]').forEach(b=>b.addEventListener('click', ()=>{
-    const f = fornecedores.find(x=>x.id===b.dataset.registrarPagamentoFornecedor);
-    if(!f) return;
-    openModal(pagamentoFornecedorModalHTML(f));
-    bindPagamentoFornecedorModal(f);
-  }));
-  document.querySelectorAll('[data-edit-fornecedor]').forEach(b=>b.addEventListener('click', ()=>{
-    const f = fornecedores.find(x=>x.id===b.dataset.editFornecedor);
-    openModal(fornecedorFormHTML(f)); bindFornecedorForm(f);
-  }));
-  document.querySelectorAll('[data-del-fornecedor]').forEach(b=>b.addEventListener('click', async ()=>{
-    if(confirm('Remover este fornecedor? Compras ligadas a ele continuarão registradas.')){
-      marcarExcluido('fornecedores', b.dataset.delFornecedor);
-      await saveTombstones();
-      fornecedores = fornecedores.filter(x=>x.id!==b.dataset.delFornecedor);
-      await saveFornecedores(); showToast('Fornecedor removido.'); render();
-    }
-  }));
+  bindFornecedorItemEvents();
   const fornecedorSearch = document.getElementById('fornecedor-search');
   if(fornecedorSearch) fornecedorSearch.addEventListener('input', (e)=>{
     fornecedorFilter = e.target.value;
-    renderPreservingInput('fornecedor-search');
+    const body = document.getElementById('fornecedores-results-body');
+    if(body){ body.innerHTML = fornecedoresResultsHTML(); bindFornecedorItemEvents(); }
   });
-  document.querySelectorAll('[data-view-compras]').forEach(el=>el.addEventListener('click', ()=>{
-    compraFornecedorFilterId = el.dataset.viewCompras;
-    activeTab = 'compras';
-    document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab==='compras'));
-    render();
-  }));
   document.querySelectorAll('[data-filter-fornecedor-compra]').forEach(el=>el.addEventListener('click', ()=>{
     compraFornecedorFilterId = el.dataset.filterFornecedorCompra;
     render();
@@ -3397,28 +3514,12 @@ function attachContentEvents(){
   // PRODUTOS
   const addProduto = document.getElementById('add-produto-btn');
   if(addProduto) addProduto.addEventListener('click', ()=>{ openModal(produtoFormHTML(null)); bindProdutoForm(null); });
-  document.querySelectorAll('[data-edit-produto]').forEach(b=>b.addEventListener('click', ()=>{
-    const p = products.find(x=>x.id===b.dataset.editProduto);
-    openModal(produtoFormHTML(p)); bindProdutoForm(p);
-  }));
-  document.querySelectorAll('[data-ver-grafico]').forEach(b=>b.addEventListener('click', ()=>{
-    const p = products.find(x=>x.id===b.dataset.verGrafico);
-    if(!p) return;
-    openModal(graficoPrecoModalHTML(p));
-    document.getElementById('cancel-modal').addEventListener('click', closeModal);
-  }));
-  document.querySelectorAll('[data-del-produto]').forEach(b=>b.addEventListener('click', async ()=>{
-    if(confirm('Remover este produto do quadro?')){
-      marcarExcluido('products', b.dataset.delProduto);
-      await saveTombstones();
-      products = products.filter(x=>x.id!==b.dataset.delProduto);
-      await saveProducts(); showToast('Produto removido.'); render();
-    }
-  }));
+  bindProdutoItemEvents();
   const produtoSearch = document.getElementById('produto-search');
   if(produtoSearch) produtoSearch.addEventListener('input', (e)=>{
     produtoFilter = e.target.value;
-    renderPreservingInput('produto-search');
+    const body = document.getElementById('produtos-results-body');
+    if(body){ body.innerHTML = produtosResultsHTML(); bindProdutoItemEvents(); }
   });
 
   // PEDIDOS
@@ -3430,66 +3531,7 @@ function attachContentEvents(){
   if(fechamentoDiaBtn) fechamentoDiaBtn.addEventListener('click', ()=>{ openModal(fechamentoDiaModalHTML()); bindFechamentoDiaModal(); });
   const fotoCadernoBtn = document.getElementById('foto-caderno-btn');
   if(fotoCadernoBtn) fotoCadernoBtn.addEventListener('click', ()=>{ openModal(fotoCadernoModalHTML()); bindFotoCadernoModal(); });
-  document.querySelectorAll('[data-filter-cliente-pedido]').forEach(el=>el.addEventListener('click', ()=>{
-    pedidoClienteFilterId = el.dataset.filterClientePedido;
-    pedidoFilter = 'todos';
-    render();
-  }));
-  document.querySelectorAll('[data-edit-pedido]').forEach(b=>b.addEventListener('click', ()=>{
-    const o = orders.find(x=>x.id===b.dataset.editPedido);
-    openModal(pedidoFormHTML(o)); bindPedidoForm(o);
-  }));
-  document.querySelectorAll('[data-del-pedido]').forEach(b=>b.addEventListener('click', async ()=>{
-    if(confirm('Remover este pedido?')){
-      marcarExcluido('orders', b.dataset.delPedido);
-      await saveTombstones();
-      orders = orders.filter(x=>x.id!==b.dataset.delPedido);
-      await saveOrders(); showToast('Pedido removido.'); render();
-    }
-  }));
-  document.querySelectorAll('[data-status-pagamento]').forEach(sel=>sel.addEventListener('change', ()=>{
-    const o = orders.find(x=>x.id===sel.dataset.statusPagamento);
-    if(o){
-      o.statusPagamento = sel.value;
-      if(sel.value==='pago') o.valorPago = orderTotal(o);
-      if(sel.value==='pendente') o.valorPago = 0;
-      o.atualizadoEm = Date.now();
-      scheduleSaveOrders(); render();
-    }
-  }));
-  document.querySelectorAll('[data-forma-pagamento]').forEach(sel=>sel.addEventListener('change', ()=>{
-    const o = orders.find(x=>x.id===sel.dataset.formaPagamento);
-    if(o){ o.formaPagamento = sel.value; o.atualizadoEm = Date.now(); scheduleSaveOrders(); render(); }
-  }));
-  document.querySelectorAll('[data-print-pedido]').forEach(b=>b.addEventListener('click', ()=>{
-    printOrder(b.dataset.printPedido);
-  }));
-  document.querySelectorAll('[data-copy-pedido]').forEach(b=>b.addEventListener('click', async ()=>{
-    const o = orders.find(x=>x.id===b.dataset.copyPedido);
-    if(!o) return;
-    const texto = pedidoTextoWhatsapp(o);
-    try{
-      if(navigator.clipboard && navigator.clipboard.writeText){
-        await navigator.clipboard.writeText(texto);
-      }else{
-        const ta = document.createElement('textarea');
-        ta.value = texto;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.focus(); ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      showToast('Copiado! Agora é só colar no WhatsApp.');
-    }catch(e){
-      console.error(e);
-      showToast('Não consegui copiar automaticamente. Tente novamente.');
-    }
-  }));
-  document.querySelectorAll('[data-print-pedido-pick]').forEach(b=>b.addEventListener('click', ()=>{
-    printOrderPick(b.dataset.printPedidoPick);
-  }));
+  bindPedidoItemEvents();
   const printListBtn = document.getElementById('print-list-btn');
   if(printListBtn) printListBtn.addEventListener('click', printOrderList);
   const printListPickBtn = document.getElementById('print-list-pick-btn');
@@ -3507,7 +3549,8 @@ function attachContentEvents(){
   const pedidoSearchInput = document.getElementById('pedido-search');
   if(pedidoSearchInput) pedidoSearchInput.addEventListener('input', (e)=>{
     pedidoSearch = e.target.value;
-    renderPreservingInput('pedido-search');
+    const body = document.getElementById('pedidos-results-body');
+    if(body){ body.innerHTML = pedidosResultsHTML(); bindPedidoItemEvents(); }
   });
   const pedidoDateFromInput = document.getElementById('pedido-date-from');
   if(pedidoDateFromInput) pedidoDateFromInput.addEventListener('change', (e)=>{ pedidoDateFrom = e.target.value; render(); });
