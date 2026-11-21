@@ -1420,10 +1420,13 @@ let cloudPushTimer = null;
 let pendingLocalChanges = false;
 
 function cleanSyncUrl(u){
-  return String(u||'').trim().replace(/\/+$/,'');
+  let t = String(u||'').trim();
+  const m = t.match(/https:\/\/[A-Za-z0-9._-]+\.(?:firebaseio\.com|firebasedatabase\.app)/);
+  if(m) t = m[0];
+  return t.replace(/\/+$/,'');
 }
 async function loadSyncConfig(){
-  try{ syncUrl = await safeGet('ceasa_sync_url'); }catch(e){ syncUrl = null; }
+  try{ syncUrl = await safeGet('ceasa_sync_url'); if(syncUrl) syncUrl = cleanSyncUrl(syncUrl); }catch(e){ syncUrl = null; }
   try{ lastSyncedTimestamp = (await safeGet('ceasa_sync_ts')) || 0; }catch(e){ lastSyncedTimestamp = 0; }
   try{ pendingLocalChanges = !!(await safeGet('ceasa_pending')); }catch(e){ /* mantém */ }
 }
