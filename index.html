@@ -1313,7 +1313,7 @@ async function signInWithEmailPassword(email, password){
 async function refreshIdToken(){
   if(!authRefreshToken) return false;
   try{
-    const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`, {
+    const res = await fetchT(`https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`, {
       method: 'POST',
       headers: {'Content-Type':'application/x-www-form-urlencoded'},
       body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(authRefreshToken)}`
@@ -1509,9 +1509,14 @@ function mesclarColecoes(local, remoto, tombstonesColecao){
     return tsItem > tomb.excluidoEm;
   });
 }
+function fetchT(url, opts, ms){
+  const ctrl = new AbortController();
+  const t = setTimeout(()=>ctrl.abort(), ms||15000);
+  return fetch(url, Object.assign({}, opts||{}, { signal: ctrl.signal })).finally(()=>clearTimeout(t));
+}
 async function pushToCloud(){
   if(!syncUrl) return false;
-  syncing = true; updateSyncCloudStatusUI();
+  syncing = true; window.__syncStart = Date.now(); updateSyncCloudStatusUI();
   let ok = false;
   try{
     const validAuth = await ensureValidIdToken();
@@ -1521,7 +1526,7 @@ async function pushToCloud(){
     let remoto = null;
     try{
       const cacheBust = (syncUrl.includes('?') ? '&' : '?') + '_ts=' + Date.now() + (validAuth ? `&auth=${authIdToken}` : '');
-      const resGet = await fetch(cleanSyncUrl(syncUrl) + '/data.json' + cacheBust, { cache: 'no-store' });
+      const resGet = await fetchT(cleanSyncUrl(syncUrl) + '/data.json' + cacheBust, { cache: 'no-store' });
       if(resGet.ok) remoto = await resGet.json();
     }catch(e){ /* segue sem mesclar se a busca falhar */ }
 
@@ -1555,7 +1560,7 @@ async function pushToCloud(){
 
     const ts = Date.now();
     const payload = { clients, products, orders, fornecedores, compras, caixas, pagamentos, tombstones, updatedAt: ts };
-    const res = await fetch(cleanSyncUrl(syncUrl) + '/data.json' + authParam, {
+    const res = await fetchT(cleanSyncUrl(syncUrl) + '/data.json' + authParam, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -1581,13 +1586,16 @@ async function pullFromCloud(force){
     const pushed = await pushToCloud();
     if(!pushed) return false;
   }
-  syncing = true; updateSyncCloudStatusUI();
+  syncing = true; window.__syncStart = Date.now(); updateSyncCloudStatusUI();
   let applied = false;
   try{
     const validAuth = await ensureValidIdToken();
     const authParam = validAuth ? `&auth=${authIdToken}` : '';
     const cacheBust = (syncUrl.includes('?') ? '&' : '?') + '_ts=' + Date.now() + authParam;
-    const res = await fetch(cleanSyncUrl(syncUrl) + '/data.json' + cacheBust, { cache: 'no-store' });
+    const res = await fetchT(cleanSyncUrl(syncUrl) + '/data.json' + cacheBust, { cache: 'no-store' });
+    if(!res.ok){
+      if((res.status===401||res.status===403) && !window.__authWarned){ window.__authWarned = true; showToast('Sessão de login expirou. Saia e entre de novo no CRM.', 6000); }
+    }
     if(res.ok){
       const remote = await res.json();
       if(remote && typeof remote.updatedAt === 'number'){
@@ -5069,6 +5077,7 @@ async function startAppAfterAuth(){
   updateSyncCloudStatusUI();
 
   setInterval(()=>{
+    if(syncing && Date.now()-(window.__syncStart||0) > 40000) syncing = false; // destrava se travou
     if(syncUrl && document.visibilityState==='visible' && !syncing){
       pullFromCloud(false);
     }
