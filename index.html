@@ -2906,8 +2906,6 @@ function buildOrderReceiptBytes(o){
   add(escposLine(''));
   add(escposLine('-'.repeat(32)));
   add(escposLine('Assinatura:'));
-  add(escposLine(''));
-  add(escposLine('_'.repeat(32)));
   add(escposFeed(3));
   add(escposCut());
   return b;
@@ -3113,8 +3111,6 @@ function buildCompraReceiptBytes(c){
   add(escposLine(''));
   add(escposLine('-'.repeat(32)));
   add(escposLine('Assinatura:'));
-  add(escposLine(''));
-  add(escposLine('_'.repeat(32)));
   add(escposFeed(3));
   add(escposCut());
   return b;
