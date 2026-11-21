@@ -2850,7 +2850,9 @@ function escposFeed(n){ return [0x1B,0x64,n]; }
 // Linha divisória sólida em 1 comando (imagem raster) — bem mais rápida que 32 caracteres "-".
 // Se a impressora imprimir lixo no lugar da linha, troque USAR_LINHA_RASTER para false.
 const USAR_LINHA_RASTER = true;
+const SEM_LINHAS_DIVISORIAS = true; // true = só espaço em branco entre as seções (mais rápido)
 function escposRule(grossa){
+  if(SEM_LINHAS_DIVISORIAS) return [0x1B,0x64,1];
   if(!USAR_LINHA_RASTER) return strToBytes((grossa?'=':'-').repeat(32)+'\n');
   const h = grossa ? 4 : 2;
   const out = [0x1D,0x76,0x30,0x00, 48,0, h,0];
@@ -2873,38 +2875,74 @@ function escposQR(data, moduleSize, ec){
   out = out.concat([0x1D,0x28,0x6B,0x03,0x00,0x31,0x51,0x30]);
   return out;
 }
+
+// ---- Design dos recibos térmicos ----
+const USAR_TEXTO_INVERTIDO = true; // fundo preto com letras brancas (total e status). Se imprimir estranho, coloque false.
+function escposInvert(on){ return USAR_TEXTO_INVERTIDO ? [0x1D,0x42,on?1:0] : []; }
+function recibosCabecalho(add, subtitulo, nome, telefone, data){
+  add(escposInit());
+  add(escposAlign(1));
+  add(escposBold(true));
+  add(escposLine('TANAKA - BOX 268'));
+  add(escposBold(false));
+  add(escposLine('CEAGESP - Sorocaba'));
+  add(escposLine(subtitulo));
+  add(escposFeed(1));
+  add(escposBold(true)); add(escposSize(1,1));
+  add(escposLine(nome));
+  add(escposSize(0,0)); add(escposBold(false));
+  if(telefone) add(escposLine(telefone));
+  add(escposLine(fmtDate(data)));
+  add(escposAlign(0));
+  add(escposFeed(1));
+}
+function recibosItens(add, itens, campoPreco){
+  itens.forEach(it=>{
+    add(escposBold(true));
+    add(escposLine(`${it.produtoNome}`));
+    add(escposBold(false));
+    add(escposLine(padLine(` ${it.qtd}${abbrevUnidade(it.unidade)} x ${fmtMoney(it[campoPreco])}`, fmtMoney(it.qtd*it[campoPreco]))));
+    add(escposFeed(1));
+  });
+}
+function recibosTotal(add, total, statusTxt, formaTxt){
+  add(escposFeed(1));
+  add(escposAlign(1));
+  const valor = fmtMoney(total);
+  const cabe = ('TOTAL'.length + 1 + stripAccentsForPrint(valor).length) <= 16;
+  add(escposBold(true));
+  if(cabe){
+    add(escposSize(1,1));
+    add(escposLine(padLine('TOTAL', valor, 16)));
+  }else{
+    add(escposSize(0,1));
+    add(escposLine(padLine('TOTAL', valor, 32)));
+  }
+  add(escposSize(0,0));
+  add(escposFeed(1));
+  add(escposInvert(true));
+  add(escposSize(1,1));
+  add(escposLine(' ' + statusTxt + ' '));
+  add(escposSize(0,0));
+  add(escposInvert(false));
+  add(escposBold(false));
+  if(formaTxt) add(escposLine(formaTxt));
+  add(escposAlign(0));
+}
+
 function buildOrderReceiptBytes(o){
   const cliente = clients.find(c=>c.id===o.clienteId);
   let b = [];
   const add = arr => { b = b.concat(arr); };
-  add(escposInit());
-  add(escposAlign(1));
-  add(escposBold(true)); add(escposSize(1,1));
-  add(escposLine('TANAKA - BOX 268'));
-  add(escposSize(0,0)); add(escposBold(false));
-  add(escposLine('CEAGESP - Sorocaba'));
-  add(escposLine('Pedido - ' + fmtDate(o.data)));
-  add(escposAlign(0));
-  add(escposRule(false));
-  add(escposBold(true)); add(escposSize(1,1));
-  add(escposLine(cliente ? cliente.nome : '(cliente removido)'));
-  add(escposSize(0,0)); add(escposBold(false));
-  if(cliente && cliente.telefone) add(escposLine(cliente.telefone));
-  add(escposRule(false));
-  o.itens.forEach(it=>{
-    add(escposLine(`${it.qtd}${abbrevUnidade(it.unidade)} ${it.produtoNome}`));
-    add(escposLine(padLine(`  ${fmtMoney(it.precoUnit)} x ${it.qtd}`, fmtMoney(it.qtd*it.precoUnit))));
-  });
-  add(escposRule(false));
-  add(escposBold(true)); add(escposSize(1,0));
-  add(escposLine(padLine('TOTAL', fmtMoney(orderTotal(o)))));
-  add(escposSize(0,0)); add(escposBold(false));
-  add(escposLine('Entregue: ' + (o.entregue ? 'SIM' : 'NAO')));
+  recibosCabecalho(add, 'Pedido', cliente ? cliente.nome : '(cliente removido)', cliente && cliente.telefone, o.data);
+  recibosItens(add, o.itens, 'precoUnit');
   const fp = formaPagamentoInfo(o.formaPagamento);
-  const statusPagoTxt = o.statusPagamento==='pago' ? 'PAGO' : (o.statusPagamento==='parcial' ? `PARCIAL (falta ${fmtMoney(orderTotal(o)-(o.valorPago||0))})` : 'PENDENTE');
-  add(escposLine('Pagto: ' + statusPagoTxt + (fp ? ' - '+fp.label.toUpperCase() : '')));
+  const statusTxt = o.statusPagamento==='pago' ? 'PAGO' : (o.statusPagamento==='parcial' ? 'PARCIAL' : 'PENDENTE');
+  let formaTxt = fp ? fp.label : '';
+  if(o.statusPagamento==='parcial') formaTxt = ('Falta ' + fmtMoney(orderTotal(o)-(o.valorPago||0))) + (fp ? ' - ' + fp.label : '');
+  recibosTotal(add, orderTotal(o), statusTxt, formaTxt);
   if(o.formaPagamento==='pix'){
-    add(escposRule(false));
+    add(escposFeed(1));
     add(escposAlign(1));
     add(escposBold(true));
     add(escposLine('PAGUE COM PIX'));
@@ -2914,8 +2952,7 @@ function buildOrderReceiptBytes(o){
     add(escposLine('Chave: ' + PIX_INFO.telefone));
     add(escposAlign(0));
   }
-  add(escposLine(''));
-  add(escposRule(false));
+  add(escposFeed(1));
   add(escposLine('Assinatura:'));
   add(escposFeed(3));
   add(escposCut());
@@ -3095,32 +3132,14 @@ function buildCompraReceiptBytes(c){
   const fornecedor = fornecedores.find(f=>f.id===c.fornecedorId);
   let b = [];
   const add = arr => { b = b.concat(arr); };
-  add(escposInit());
-  add(escposAlign(1));
-  add(escposBold(true)); add(escposSize(1,1));
-  add(escposLine('TANAKA - BOX 268'));
-  add(escposSize(0,0)); add(escposBold(false));
-  add(escposLine('CEAGESP - Sorocaba'));
-  add(escposLine('Compra - ' + fmtDate(c.data)));
-  add(escposAlign(0));
-  add(escposRule(false));
-  add(escposBold(true)); add(escposSize(1,1));
-  add(escposLine(fornecedor ? fornecedor.nome : '(fornecedor removido)'));
-  add(escposSize(0,0)); add(escposBold(false));
-  if(fornecedor && fornecedor.telefone) add(escposLine(fornecedor.telefone));
-  add(escposRule(false));
-  c.itens.forEach(it=>{
-    add(escposLine(`${it.qtd}${abbrevUnidade(it.unidade)} ${it.produtoNome}`));
-    add(escposLine(padLine(`  ${fmtMoney(it.custoUnit)} x ${it.qtd}`, fmtMoney(it.qtd*it.custoUnit))));
-  });
-  add(escposRule(false));
-  add(escposBold(true)); add(escposSize(1,0));
-  add(escposLine(padLine('TOTAL', fmtMoney(compraTotal(c)))));
-  add(escposSize(0,0)); add(escposBold(false));
+  recibosCabecalho(add, 'Compra', fornecedor ? fornecedor.nome : '(fornecedor removido)', fornecedor && fornecedor.telefone, c.data);
+  recibosItens(add, c.itens, 'custoUnit');
   const fp = formaPagamentoInfo(c.formaPagamento);
-  add(escposLine('Pagto: ' + (c.statusPagamento==='pago' ? 'PAGO' : 'PENDENTE') + (fp ? ' - '+fp.label.toUpperCase() : '')));
-  add(escposLine(''));
-  add(escposRule(false));
+  const statusTxt = c.statusPagamento==='pago' ? 'PAGO' : (c.statusPagamento==='parcial' ? 'PARCIAL' : 'PENDENTE');
+  let formaTxt = fp ? fp.label : '';
+  if(c.statusPagamento==='parcial') formaTxt = ('Falta ' + fmtMoney(compraTotal(c)-(c.valorPago||0))) + (fp ? ' - ' + fp.label : '');
+  recibosTotal(add, compraTotal(c), statusTxt, formaTxt);
+  add(escposFeed(1));
   add(escposLine('Assinatura:'));
   add(escposFeed(3));
   add(escposCut());
