@@ -2239,6 +2239,10 @@ function bindPedidoItemEvents(){
   document.querySelectorAll('[data-print-pedido]').forEach(b=>b.addEventListener('click', ()=>{
     printOrder(b.dataset.printPedido);
   }));
+  document.querySelectorAll('[data-copy-cobranca]').forEach(b=>b.addEventListener('click', ()=>{
+    const o = orders.find(x=>x.id===b.dataset.copyCobranca);
+    if(o) copiarTextoWhatsapp(cobrancaTextoWhatsapp(o));
+  }));
   document.querySelectorAll('[data-copy-pedido]').forEach(b=>b.addEventListener('click', async ()=>{
     const o = orders.find(x=>x.id===b.dataset.copyPedido);
     if(!o) return;
@@ -2329,7 +2333,8 @@ function orderCardHTML(o){
         <div class="name">${cliente ? `<span class="clickable-name" data-filter-cliente-pedido="${cliente.id}">${escapeHtml(cliente.nome)}</span>` : '(cliente removido)'} <span class="date-tag">· ${fmtDate(o.data)}</span></div>
         <div class="actions-row">
           <button class="icon-btn" data-print-pedido="${o.id}">${ICON.print}</button>
-          <button class="icon-btn" data-copy-pedido="${o.id}">${ICON.copy}</button>
+          <button class="icon-btn" data-copy-pedido="${o.id}" title="Copiar pedido">${ICON.copy}</button>
+          <button class="icon-btn" data-copy-cobranca="${o.id}" title="Copiar com cobrança" style="font-weight:700;font-size:13px;">R$</button>
           <button class="icon-btn" data-print-pedido-pick="${o.id}">${ICON.checklist}</button>
           <button class="icon-btn" data-edit-pedido="${o.id}">${ICON.edit}</button>
           <button class="icon-btn danger" data-del-pedido="${o.id}">${ICON.trash}</button>
@@ -3131,6 +3136,38 @@ function compraTextoWhatsapp(c){
   txt += `${linhas}\n\n`;
   txt += `*Total: ${fmtMoney(compraTotal(c))}*`;
   return txt;
+}
+function cobrancaTextoWhatsapp(o){
+  const cliente = clients.find(c=>c.id===o.clienteId);
+  const saldo = o.clienteId ? clienteTotalPendente(o.clienteId) : 0;
+  let txt = `*Tanaka - Box 268*\n\n`;
+  txt += `Pedido - ${fmtDate(o.data)}\n`;
+  txt += `Cliente: ${cliente ? cliente.nome : '(removido)'}\n\n`;
+  txt += `Total do pedido: ${fmtMoney(orderTotal(o))}\n`;
+  txt += `*Saldo pendente: ${fmtMoney(saldo)}*\n\n`;
+  txt += `Pix: ${PIX_INFO.telefone}\n`;
+  txt += `${PIX_INFO.nome} - ${PIX_INFO.banco}`;
+  return txt;
+}
+async function copiarTextoWhatsapp(texto){
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(texto);
+    }else{
+      const ta = document.createElement('textarea');
+      ta.value = texto;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    showToast('Copiado! Agora é só colar no WhatsApp.');
+  }catch(e){
+    console.error(e);
+    showToast('Não consegui copiar automaticamente. Tente novamente.');
+  }
 }
 function pedidoTextoWhatsapp(o){
   const cliente = clients.find(c=>c.id===o.clienteId);
