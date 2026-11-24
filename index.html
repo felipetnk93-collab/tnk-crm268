@@ -2241,18 +2241,7 @@ function bindPedidoItemEvents(){
   }));
   document.querySelectorAll('[data-copy-pedido]').forEach(b=>b.addEventListener('click', ()=>{
     const o = orders.find(x=>x.id===b.dataset.copyPedido);
-    if(!o) return;
-    openModal(`
-      <h3>Copiar para WhatsApp</h3>
-      <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
-        <button type="button" class="btn primary" id="copy-simples">${ICON.copy} Copiar pedido</button>
-        <button type="button" class="btn primary" id="copy-cobranca">${ICON.copy} Copiar com cobrança (total, saldo e Pix)</button>
-        <button type="button" class="btn ghost" id="cancel-modal">Cancelar</button>
-      </div>
-    `);
-    document.getElementById('cancel-modal').addEventListener('click', closeModal);
-    document.getElementById('copy-simples').addEventListener('click', async ()=>{ closeModal(); await copiarTextoWhatsapp(pedidoTextoWhatsapp(o)); });
-    document.getElementById('copy-cobranca').addEventListener('click', async ()=>{ closeModal(); await copiarTextoWhatsapp(cobrancaTextoWhatsapp(o)); });
+    if(o) copiarTextoWhatsapp(pedidoTextoWhatsapp(o));
   }));
   document.querySelectorAll('[data-print-pedido-pick]').forEach(b=>b.addEventListener('click', ()=>{
     printOrderPick(b.dataset.printPedidoPick);
@@ -3124,18 +3113,6 @@ function compraTextoWhatsapp(c){
   txt += `*Total: ${fmtMoney(compraTotal(c))}*`;
   return txt;
 }
-function cobrancaTextoWhatsapp(o){
-  const cliente = clients.find(c=>c.id===o.clienteId);
-  const saldo = o.clienteId ? clienteTotalPendente(o.clienteId) : 0;
-  let txt = `*Tanaka - Box 268*\n\n`;
-  txt += `Pedido - ${fmtDate(o.data)}\n`;
-  txt += `Cliente: ${cliente ? cliente.nome : '(removido)'}\n\n`;
-  txt += `Total do pedido: ${fmtMoney(orderTotal(o))}\n`;
-  txt += `*Saldo pendente: ${fmtMoney(saldo)}*\n\n`;
-  txt += `Pix: ${PIX_INFO.telefone}\n`;
-  txt += `${PIX_INFO.nome} - ${PIX_INFO.banco}`;
-  return txt;
-}
 async function copiarTextoWhatsapp(texto){
   try{
     if(navigator.clipboard && navigator.clipboard.writeText){
@@ -3166,6 +3143,10 @@ function pedidoTextoWhatsapp(o){
   txt += `Cliente: ${cliente ? cliente.nome : '(removido)'}\n\n`;
   txt += `${linhas}\n\n`;
   txt += `*Total: ${fmtMoney(orderTotal(o))}*`;
+  const saldo = o.clienteId ? clienteTotalPendente(o.clienteId) : 0;
+  txt += `\n*Saldo pendente: ${fmtMoney(saldo)}*\n\n`;
+  txt += `Pix: ${PIX_INFO.telefone}\n`;
+  txt += `${PIX_INFO.nome} - ${PIX_INFO.banco}`;
   return txt;
 }
 function buildCompraReceiptBytes(c){
