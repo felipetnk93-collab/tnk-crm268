@@ -3137,10 +3137,7 @@ function pedidoTextoWhatsapp(o){
   const linhas = o.itens.map(i=>
     `${i.produtoNome}\n- ${i.qtd}${abbrevUnidade(i.unidade)}  X ${fmtMoney(i.precoUnit)}  = ${fmtMoney(i.qtd*i.precoUnit)}`
   ).join('\n\n');
-  let txt = `Olá\n`;
-  txt += `Quando puder, dá uma conferida se está tudo certo. Qualquer coisa é só me avisar.\n`;
-  txt += `Obrigado\n\n`;
-  txt += `*Tanaka - Box 268*\n\n`;
+  let txt = `*Tanaka - Box 268*\n\n`;
   txt += `Pedido - ${fmtDate(o.data)}\n`;
   txt += `Cliente: ${cliente ? cliente.nome : '(removido)'}\n\n`;
   txt += `${linhas}\n\n`;
