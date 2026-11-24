@@ -3142,10 +3142,10 @@ function pedidoTextoWhatsapp(o){
   txt += `Pedido - ${fmtDate(o.data)}\n`;
   txt += `Cliente: ${cliente ? cliente.nome : '(removido)'}\n\n`;
   txt += `${linhas}\n\n`;
-  txt += `*Total: ${fmtMoney(orderTotal(o))}*`;
+  txt += `*Total do pedido: ${fmtMoney(orderTotal(o))}*`;
   const saldo = o.clienteId ? clienteTotalPendente(o.clienteId) : 0;
-  txt += `\n*Saldo pendente: ${fmtMoney(saldo)}*\n\n`;
-  txt += `Pix: ${PIX_INFO.telefone}\n`;
+  if(saldo > 0.005) txt += `\n\n*Saldo pendente: ${fmtMoney(saldo)}*`;
+  txt += `\n\nPix: ${PIX_INFO.telefone}\n`;
   txt += `${PIX_INFO.nome} - ${PIX_INFO.banco}`;
   return txt;
 }
