@@ -3144,7 +3144,9 @@ function pedidoTextoWhatsapp(o){
   txt += `${linhas}\n\n`;
   txt += `*Total do pedido: ${fmtMoney(orderTotal(o))}*`;
   const saldo = o.clienteId ? clienteTotalPendente(o.clienteId) : 0;
-  if(saldo > 0.005) txt += `\n\n*Saldo pendente: ${fmtMoney(saldo)}*`;
+  const pendenteDestePedido = o.statusPagamento!=='pago' ? (orderTotal(o) - (o.valorPago||0)) : 0;
+  // só mostra o saldo quando o cliente deve algo além deste pedido
+  if(saldo - pendenteDestePedido > 0.005) txt += `\n\n*Saldo pendente: ${fmtMoney(saldo)}*`;
   txt += `\n\nPix: ${PIX_INFO.telefone}\n`;
   txt += `${PIX_INFO.nome} - ${PIX_INFO.banco}`;
   return txt;
