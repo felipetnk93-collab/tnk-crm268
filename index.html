@@ -1534,6 +1534,7 @@ async function pushToCloud(){
     }catch(e){ /* segue sem mesclar se a busca falhar */ }
 
     if(remoto){
+      const antesSnap = JSON.stringify({clients, products, orders, fornecedores, compras, caixas, pagamentos});
       const remoteTombstones = remoto.tombstones || {};
       tombstones.clients = mesclarTombstones(tombstones.clients, remoteTombstones.clients);
       tombstones.products = mesclarTombstones(tombstones.products, remoteTombstones.products);
@@ -1558,7 +1559,8 @@ async function pushToCloud(){
         safeSet('ceasa_pagamentos', pagamentos)
       ]);
       await saveTombstones();
-      render();
+      const depoisSnap = JSON.stringify({clients, products, orders, fornecedores, compras, caixas, pagamentos});
+      if(depoisSnap !== antesSnap) render();
     }
 
     const ts = Date.now();
@@ -1839,6 +1841,23 @@ function render(){
   const main = document.getElementById('main-content');
   if(!dataReady){
     main.innerHTML = `<div class="loading-wrap"><div class="spinner"></div> Carregando banca…</div>`;
+    return;
+  }
+  // Se o usuário está digitando num campo de busca, não recria a tela (isso fechava o teclado).
+  // Só atualiza a lista de resultados; nas abas sem lista separada, adia o redesenho.
+  const focado = document.activeElement;
+  if(focado && focado.tagName==='INPUT' && focado.id && /-search$/.test(focado.id) && main.contains(focado)){
+    const mapa = {
+      'cliente-search': ['clientes-results-body', ()=>clientesResultsHTML(), ()=>bindClienteItemEvents()],
+      'fornecedor-search': ['fornecedores-results-body', ()=>fornecedoresResultsHTML(), ()=>bindFornecedorItemEvents()],
+      'produto-search': ['produtos-results-body', ()=>produtosResultsHTML(), ()=>bindProdutoItemEvents()],
+      'pedido-search': ['pedidos-results-body', ()=>pedidosResultsHTML(), ()=>bindPedidoItemEvents()]
+    };
+    const m = mapa[focado.id];
+    if(m){
+      const body = document.getElementById(m[0]);
+      if(body){ body.innerHTML = m[1](); m[2](); }
+    }
     return;
   }
   if(activeTab==='clientes') main.innerHTML = renderClientes();
